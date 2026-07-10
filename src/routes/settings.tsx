@@ -6,11 +6,56 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { useEffect, useState } from "react";
+import { useHealth } from "@/lib/queries";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "Settings · Sketch2TikZ AI" }, { name: "description", content: "Manage preferences, compiler, IBM Cloud and Granite model." }] }),
   component: SettingsPage,
 });
+
+const STORAGE_KEY = "sketch2tikz.settings.v1";
+
+interface LocalSettings {
+  theme: string;
+  language: string;
+  reducedMotion: boolean;
+  autoSave: boolean;
+  keyboardShortcuts: string;
+  notifications: boolean;
+  compilerEngine: string;
+  exportQuality: string;
+  autoErrorRepair: boolean;
+  graniteModel: string;
+  developerMode: boolean;
+  verboseLogs: boolean;
+}
+
+const DEFAULT_SETTINGS: LocalSettings = {
+  theme: "dark",
+  language: "en",
+  reducedMotion: false,
+  autoSave: true,
+  keyboardShortcuts: "default",
+  notifications: true,
+  compilerEngine: "pdflatex",
+  exportQuality: "high",
+  autoErrorRepair: true,
+  graniteModel: "granite-13b",
+  developerMode: false,
+  verboseLogs: false,
+};
+
+function loadSettings(): LocalSettings {
+  if (typeof window === "undefined") return DEFAULT_SETTINGS;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return DEFAULT_SETTINGS;
+    return { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<LocalSettings>) };
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
 
 function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
   return (
@@ -36,44 +81,126 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
   );
 }
 
+function statusColor(status: string | undefined): string {
+  if (status === "Online" || status === "ok") return "bg-emerald-400";
+  if (status === "Idle" || status === "degraded") return "bg-amber-400";
+  return "bg-muted-foreground";
+}
+
 function SettingsPage() {
+  const [settings, setSettings] = useState<LocalSettings>(DEFAULT_SETTINGS);
+  const { data: health, isLoading: healthLoading } = useHealth();
+
+  useEffect(() => {
+    setSettings(loadSettings());
+  }, []);
+
+  const update = <K extends keyof LocalSettings>(key: K, value: LocalSettings[K]) =>
+    setSettings((s) => ({ ...s, [key]: value }));
+
+  const save = () => {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    toast.success("Settings saved");
+  };
+
+  const graniteStatus = health?.services?.["granite"] ?? health?.services?.["watsonx"] ?? health?.status;
+  const cloudantStatus = health?.services?.["cloudant"];
+  const cosStatus = health?.services?.["object_storage"] ?? health?.services?.["cos"];
+
   return (
     <PageShell>
       <PageHeader
         eyebrow="Preferences"
         title="Settings"
         description="Tune the editor, compiler and IBM Cloud integration."
-        actions={<Button onClick={() => toast.success("Settings saved")}>Save changes</Button>}
+        actions={<Button onClick={save}>Save changes</Button>}
       />
 
       <Section title="Appearance" description="Theme and typography.">
-        <Row label="Theme" hint="Dark by default"><Select defaultValue="dark"><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="dark">Dark</SelectItem><SelectItem value="light">Light</SelectItem><SelectItem value="system">System</SelectItem></SelectContent></Select></Row>
-        <Row label="Language"><Select defaultValue="en"><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="en">English</SelectItem><SelectItem value="hi">Hindi</SelectItem><SelectItem value="es">Spanish</SelectItem></SelectContent></Select></Row>
-        <Row label="Reduced motion"><Switch /></Row>
+        <Row label="Theme" hint="Dark by default">
+          <Select value={settings.theme} onValueChange={(v) => update("theme", v)}>
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="dark">Dark</SelectItem><SelectItem value="light">Light</SelectItem><SelectItem value="system">System</SelectItem></SelectContent>
+          </Select>
+        </Row>
+        <Row label="Language">
+          <Select value={settings.language} onValueChange={(v) => update("language", v)}>
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="en">English</SelectItem><SelectItem value="hi">Hindi</SelectItem><SelectItem value="es">Spanish</SelectItem></SelectContent>
+          </Select>
+        </Row>
+        <Row label="Reduced motion">
+          <Switch checked={settings.reducedMotion} onCheckedChange={(v) => update("reducedMotion", v)} />
+        </Row>
       </Section>
 
       <Section title="Editor" description="Autosave and behavior.">
-        <Row label="Auto save"><Switch defaultChecked /></Row>
-        <Row label="Keyboard shortcuts"><Select defaultValue="default"><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="default">Default</SelectItem><SelectItem value="vim">Vim</SelectItem></SelectContent></Select></Row>
-        <Row label="Notifications"><Switch defaultChecked /></Row>
+        <Row label="Auto save">
+          <Switch checked={settings.autoSave} onCheckedChange={(v) => update("autoSave", v)} />
+        </Row>
+        <Row label="Keyboard shortcuts">
+          <Select value={settings.keyboardShortcuts} onValueChange={(v) => update("keyboardShortcuts", v)}>
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="default">Default</SelectItem><SelectItem value="vim">Vim</SelectItem></SelectContent>
+          </Select>
+        </Row>
+        <Row label="Notifications">
+          <Switch checked={settings.notifications} onCheckedChange={(v) => update("notifications", v)} />
+        </Row>
       </Section>
 
       <Section title="Compiler" description="LaTeX compilation options.">
-        <Row label="Engine"><Select defaultValue="pdflatex"><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pdflatex">pdflatex</SelectItem><SelectItem value="xelatex">xelatex</SelectItem><SelectItem value="lualatex">lualatex</SelectItem></SelectContent></Select></Row>
-        <Row label="Export quality"><Select defaultValue="high"><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="draft">Draft</SelectItem><SelectItem value="normal">Normal</SelectItem><SelectItem value="high">High</SelectItem></SelectContent></Select></Row>
-        <Row label="Auto error repair" hint="AI fixes compilation errors automatically"><Switch defaultChecked /></Row>
+        <Row label="Engine">
+          <Select value={settings.compilerEngine} onValueChange={(v) => update("compilerEngine", v)}>
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="pdflatex">pdflatex</SelectItem><SelectItem value="xelatex">xelatex</SelectItem><SelectItem value="lualatex">lualatex</SelectItem></SelectContent>
+          </Select>
+        </Row>
+        <Row label="Export quality">
+          <Select value={settings.exportQuality} onValueChange={(v) => update("exportQuality", v)}>
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="draft">Draft</SelectItem><SelectItem value="normal">Normal</SelectItem><SelectItem value="high">High</SelectItem></SelectContent>
+          </Select>
+        </Row>
+        <Row label="Auto error repair" hint="AI fixes compilation errors automatically">
+          <Switch checked={settings.autoErrorRepair} onCheckedChange={(v) => update("autoErrorRepair", v)} />
+        </Row>
       </Section>
 
-      <Section title="IBM Cloud" description="Granite model and services (env-driven).">
-        <Row label="Granite Model"><Select defaultValue="granite-13b"><SelectTrigger className="w-56"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="granite-13b">granite-13b-instruct</SelectItem><SelectItem value="granite-20b">granite-20b-code</SelectItem><SelectItem value="granite-vision">granite-vision</SelectItem></SelectContent></Select></Row>
-        <Row label="Cloudant URL"><Input className="w-72" placeholder="https://…cloudantnosqldb.appdomain.cloud" /></Row>
-        <Row label="Object Storage bucket"><Input className="w-72" placeholder="sketch2tikz-bucket" /></Row>
-        <Row label="Code Engine project"><Input className="w-72" placeholder="sketch2tikz-prod" /></Row>
+      <Section title="IBM Cloud" description="Granite model and services (live status from the backend's /health endpoint).">
+        <Row label="Granite Model">
+          <Select value={settings.graniteModel} onValueChange={(v) => update("graniteModel", v)}>
+            <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="granite-13b">granite-13b-instruct</SelectItem><SelectItem value="granite-20b">granite-20b-code</SelectItem><SelectItem value="granite-vision">granite-vision</SelectItem></SelectContent>
+          </Select>
+        </Row>
+        <Row label="Granite status">
+          <span className="inline-flex items-center gap-1.5 text-sm">
+            <span className={`h-1.5 w-1.5 rounded-full ${statusColor(graniteStatus)}`} />
+            {healthLoading ? "Checking…" : graniteStatus ?? "Unknown"}
+          </span>
+        </Row>
+        <Row label="Cloudant status">
+          <span className="inline-flex items-center gap-1.5 text-sm">
+            <span className={`h-1.5 w-1.5 rounded-full ${statusColor(cloudantStatus)}`} />
+            {healthLoading ? "Checking…" : cloudantStatus ?? "Unknown"}
+          </span>
+        </Row>
+        <Row label="Object Storage status">
+          <span className="inline-flex items-center gap-1.5 text-sm">
+            <span className={`h-1.5 w-1.5 rounded-full ${statusColor(cosStatus)}`} />
+            {healthLoading ? "Checking…" : cosStatus ?? "Unknown"}
+          </span>
+        </Row>
       </Section>
 
       <Section title="Developer" description="Advanced tooling.">
-        <Row label="Developer mode"><Switch /></Row>
-        <Row label="Verbose logs"><Switch /></Row>
+        <Row label="Developer mode">
+          <Switch checked={settings.developerMode} onCheckedChange={(v) => update("developerMode", v)} />
+        </Row>
+        <Row label="Verbose logs">
+          <Switch checked={settings.verboseLogs} onCheckedChange={(v) => update("verboseLogs", v)} />
+        </Row>
       </Section>
     </PageShell>
   );

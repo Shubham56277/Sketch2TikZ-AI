@@ -1,0 +1,21 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+python-multipart==0.0.20
+httpx==0.28.1
+python-dotenv==1.0.1
+tenacity==9.0.0
+
+# IBM Cloud SDKs
+ibm-watsonx-ai==1.1.26
+ibmcloudant==0.10.2
+ibm-cos-sdk==2.13.6
+# Transitive requirement of ibm-watsonx-ai's helpers.connections module (data
+# connection / flight service support). Pinned explicitly so it installs
+# up-front at build time instead of ibm-watsonx-ai lazily pip-installing it
+# on first import at runtime (which fails in locked-down containers).
+pyarrow==18.1.0
+
+# Image handling
+Pillow==11.1.0

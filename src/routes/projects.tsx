@@ -2,27 +2,64 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { PageShell, PageHeader } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FileCode2, Search, MoreHorizontal, Plus, Star } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { FileCode2, Search, MoreHorizontal, Plus, Star, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
+import { ApiError } from "@/lib/api-client";
+import { useDeleteProject, useProjects, useUpdateProject } from "@/lib/queries";
 
 export const Route = createFileRoute("/projects")({
   head: () => ({ meta: [{ title: "Projects · Sketch2TikZ AI" }, { name: "description", content: "All your TikZ projects." }] }),
   component: Projects,
 });
 
-const projects = [
-  { name: "Neural Network — 3 layers", type: "Diagram", updated: "2h ago", starred: true },
-  { name: "Login Auth Flowchart", type: "Flowchart", updated: "Yesterday" },
-  { name: "IEEE Paper Figure 3", type: "Research", updated: "2d ago", starred: true },
-  { name: "Kubernetes Architecture", type: "Architecture", updated: "3d ago" },
-  { name: "ER Diagram — Bookstore", type: "ER", updated: "5d ago" },
-  { name: "State Machine — TCP", type: "State", updated: "1w ago" },
-  { name: "Decision Tree — Fraud", type: "Tree", updated: "1w ago" },
-  { name: "Circuit — RLC filter", type: "Circuit", updated: "2w ago" },
-  { name: "Mind Map — Thesis", type: "Mindmap", updated: "3w ago" },
-];
+function relativeTime(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const minutes = Math.round(diffMs / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return `${Math.round(days / 7)}w ago`;
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ApiError) return error.message;
+  if (error instanceof Error) return error.message;
+  return fallback;
+}
 
 function Projects() {
+  const [query, setQuery] = useState("");
+  const { data: projects, isLoading, isError, error } = useProjects();
+  const updateProject = useUpdateProject();
+  const deleteProject = useDeleteProject();
+
+  const filtered = useMemo(() => {
+    if (!projects) return [];
+    const q = query.trim().toLowerCase();
+    if (!q) return projects;
+    return projects.filter((p) => p.name.toLowerCase().includes(q));
+  }, [projects, query]);
+
+  const toggleStar = (id: string, starred: boolean) => {
+    updateProject.mutate(
+      { id, payload: { starred: !starred } },
+      { onError: (err) => toast.error("Couldn't update project", { description: errorMessage(err, "Please try again.") }) },
+    );
+  };
+
+  const removeProject = (id: string, name: string) => {
+    deleteProject.mutate(id, {
+      onSuccess: () => toast.success(`Deleted "${name}"`),
+      onError: (err) => toast.error("Couldn't delete project", { description: errorMessage(err, "Please try again.") }),
+    });
+  };
+
   return (
     <PageShell>
       <PageHeader
@@ -35,31 +72,75 @@ function Projects() {
       />
       <div className="relative mb-6 max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Search projects…" className="pl-9" />
+        <Input
+          placeholder="Search projects…"
+          className="pl-9"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {projects.map((p, i) => (
-          <motion.div
-            key={p.name}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.03 * i }}
-            className="group rounded-2xl border border-border bg-card p-5 hover:border-foreground/30 hover:-translate-y-0.5 transition-all"
-          >
-            <div className="flex items-start justify-between">
-              <div className="h-10 w-10 rounded-lg bg-muted grid place-items-center">
-                <FileCode2 className="h-5 w-5" />
+
+      {isLoading && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-32 rounded-2xl" />
+          ))}
+        </div>
+      )}
+
+      {isError && (
+        <div className="rounded-2xl border border-dashed border-border p-10 text-center">
+          <div className="font-medium">Couldn't load projects</div>
+          <div className="text-sm text-muted-foreground mt-1">{errorMessage(error, "The backend may be unreachable.")}</div>
+        </div>
+      )}
+
+      {!isLoading && !isError && filtered.length === 0 && (
+        <div className="rounded-2xl border border-dashed border-border p-16 text-center">
+          <FileCode2 className="h-10 w-10 mx-auto text-muted-foreground" />
+          <div className="mt-3 font-medium">{query ? "No matching projects" : "No projects yet"}</div>
+          <div className="text-sm text-muted-foreground mt-1">
+            {query ? "Try a different search term." : "Create your first diagram from the workspace."}
+          </div>
+        </div>
+      )}
+
+      {!isLoading && !isError && filtered.length > 0 && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((p, i) => (
+            <motion.div
+              key={p.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.03 * i }}
+              className="group rounded-2xl border border-border bg-card p-5 hover:border-foreground/30 hover:-translate-y-0.5 transition-all"
+            >
+              <div className="flex items-start justify-between">
+                <div className="h-10 w-10 rounded-lg bg-muted grid place-items-center">
+                  <FileCode2 className="h-5 w-5" />
+                </div>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => toggleStar(p.id, !!p.starred)} aria-label={p.starred ? "Unstar" : "Star"}>
+                    <Star className={`h-4 w-4 ${p.starred ? "fill-foreground" : "opacity-0 group-hover:opacity-60"}`} />
+                  </button>
+                  <button
+                    onClick={() => removeProject(p.id, p.name)}
+                    aria-label="Delete"
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-accent transition"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                  <button className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-accent transition"><MoreHorizontal className="h-4 w-4" /></button>
+                </div>
               </div>
-              <div className="flex items-center gap-1">
-                {p.starred && <Star className="h-4 w-4 fill-foreground" />}
-                <button className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-accent transition"><MoreHorizontal className="h-4 w-4" /></button>
-              </div>
-            </div>
-            <div className="mt-4 font-medium truncate">{p.name}</div>
-            <div className="mt-1 text-xs text-muted-foreground">{p.type} · {p.updated}</div>
-          </motion.div>
-        ))}
-      </div>
+              <Link to="/workspace" className="block mt-4">
+                <div className="font-medium truncate">{p.name}</div>
+                <div className="mt-1 text-xs text-muted-foreground">{p.diagramType ?? "Diagram"} · {relativeTime(p.updatedAt)}</div>
+              </Link>
+            </motion.div>
+          ))}
+        </div>
+      )}
     </PageShell>
   );
 }

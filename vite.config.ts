@@ -3,6 +3,7 @@ import tailwindcss from "@tailwindcss/vite";
 import viteReact from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import tsConfigPaths from "vite-tsconfig-paths";
+import { nitro } from "nitro/vite";
 
 export default defineConfig({
   plugins: [
@@ -14,5 +15,7 @@ export default defineConfig({
     }),
     // react's vite plugin must come after start's vite plugin
     viteReact(),
+    // Nitro builds the server output into a format Vercel (and other hosts) can deploy as functions.
+    nitro({ preset: "vercel" }),
   ],
 });

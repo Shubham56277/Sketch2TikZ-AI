@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Send,
   Upload,
@@ -25,7 +25,16 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-
+import { ApiError } from "@/lib/api-client";
+import {
+  useAutofixDiagram,
+  useCompileDiagram,
+  useCreateProject,
+  useExportDiagram,
+  useGenerateDiagram,
+  useUpdateProject,
+  useUploadSketch,
+} from "@/lib/queries";
 
 export const Route = createFileRoute("/workspace")({
   head: () => ({
@@ -47,49 +56,193 @@ const examples = [
   "AWS-style architecture with VPC, RDS, and Lambda",
 ];
 
-const SAMPLE_TIKZ = `\\begin{tikzpicture}[node distance=1.6cm, every node/.style={font=\\sffamily}]
-  \\tikzstyle{block} = [rectangle, rounded corners, draw, minimum width=3cm, minimum height=1cm, align=center]
-  \\tikzstyle{decision} = [diamond, draw, aspect=2, align=center]
-
-  \\node[block] (start) {User visits /login};
-  \\node[block, below of=start] (form) {Submit credentials};
-  \\node[decision, below of=form, yshift=-0.4cm] (check) {Valid?};
-  \\node[block, below of=check, yshift=-0.4cm] (ok) {Issue JWT};
-  \\node[block, right of=check, xshift=3cm] (fail) {Show error};
-
-  \\draw[->] (start) -- (form);
-  \\draw[->] (form) -- (check);
-  \\draw[->] (check) -- node[left]{yes} (ok);
-  \\draw[->] (check) -- node[above]{no} (fail);
-\\end{tikzpicture}`;
+function errorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ApiError) return error.message;
+  if (error instanceof Error) return error.message;
+  return fallback;
+}
 
 function Workspace() {
   const [messages, setMessages] = useState<Msg[]>([
     { role: "assistant", content: "Hi! Describe a diagram or upload a sketch to get started." },
   ]);
   const [input, setInput] = useState("");
-  const [thinking, setThinking] = useState(false);
-  const [code, setCode] = useState(SAMPLE_TIKZ);
+  const [code, setCode] = useState("");
+  const [explanation, setExplanation] = useState<string>(
+    "Generate a diagram to see how it works here.",
+  );
+  const [logs, setLogs] = useState<string>("No compilation yet.");
+  const [pdfUrl, setPdfUrl] = useState<string | undefined>(undefined);
+  const [projectId, setProjectId] = useState<string | undefined>(undefined);
+  const [compiledMs, setCompiledMs] = useState<number | undefined>(undefined);
 
-  const send = (text?: string) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const generateMutation = useGenerateDiagram();
+  const compileMutation = useCompileDiagram();
+  const autofixMutation = useAutofixDiagram();
+  const uploadSketchMutation = useUploadSketch();
+  const createProjectMutation = useCreateProject();
+  const updateProjectMutation = useUpdateProject();
+  const exportMutation = useExportDiagram();
+
+  const thinking = generateMutation.isPending || uploadSketchMutation.isPending;
+  const compiling = compileMutation.isPending;
+
+  /** Persist the current TikZ code as a project — creates on first save, updates after. */
+  const persistProject = async (tikzCode: string, name = "Untitled Diagram") => {
+    try {
+      if (!projectId) {
+        const project = await createProjectMutation.mutateAsync({ name, tikzCode });
+        setProjectId(project.id);
+        return project.id;
+      }
+      await updateProjectMutation.mutateAsync({ id: projectId, payload: { tikzCode } });
+      return projectId;
+    } catch (error) {
+      toast.error("Couldn't save project", { description: errorMessage(error, "Please try again.") });
+      return projectId;
+    }
+  };
+
+  const runCompile = async (tikzCode: string) => {
+    try {
+      const result = await compileMutation.mutateAsync({ tikzCode });
+      setLogs(result.logs ?? (result.success ? "Compilation succeeded." : "Compilation failed."));
+      setCompiledMs(result.durationMs);
+      if (result.success && result.pdfUrl) {
+        setPdfUrl(result.pdfUrl);
+        toast.success("Diagram compiled", { description: "PDF preview updated." });
+      } else {
+        toast.error("Compilation failed", { description: result.error ?? "Check the Logs tab for details." });
+      }
+      return result;
+    } catch (error) {
+      const description = errorMessage(error, "Could not reach the compiler service.");
+      setLogs(description);
+      toast.error("Compilation failed", { description });
+      return undefined;
+    }
+  };
+
+  const send = async (text?: string) => {
     const value = (text ?? input).trim();
-    if (!value) return;
+    if (!value || thinking) return;
     setMessages((m) => [...m, { role: "user", content: value }]);
     setInput("");
-    setThinking(true);
-    setTimeout(() => {
+
+    try {
+      const result = await generateMutation.mutateAsync({ prompt: value, projectId });
+      setCode(result.tikzCode);
+      setExplanation(result.explanation ?? "Diagram generated from your prompt.");
       setMessages((m) => [
         ...m,
-        { role: "assistant", content: "Generated a TikZ diagram based on your prompt. Preview updated on the right." },
+        { role: "assistant", content: "Generated a TikZ diagram based on your prompt. Compiling now…" },
       ]);
-      setCode(SAMPLE_TIKZ);
-      setThinking(false);
-      toast.success("Diagram generated", { description: "TikZ compiled successfully." });
-    }, 1400);
+      await persistProject(result.tikzCode, value.slice(0, 60));
+      await runCompile(result.tikzCode);
+    } catch (error) {
+      const description = errorMessage(error, "Could not reach the generation service.");
+      setMessages((m) => [...m, { role: "assistant", content: `Sorry, generation failed: ${description}` }]);
+      toast.error("Generation failed", { description });
+    }
+  };
+
+  const handleCompileClick = async () => {
+    if (!code.trim()) {
+      toast.error("Nothing to compile", { description: "Generate or write some TikZ code first." });
+      return;
+    }
+    await runCompile(code);
+  };
+
+  const handleAutoFix = async () => {
+    if (!code.trim()) {
+      toast.error("Nothing to fix", { description: "Generate or write some TikZ code first." });
+      return;
+    }
+    try {
+      const result = await autofixMutation.mutateAsync({ tikzCode: code, errorLog: logs });
+      setCode(result.tikzCode);
+      if (result.explanation) setExplanation(result.explanation);
+      if (result.fixed) {
+        toast.success("Auto-fix applied", { description: "Recompiling…" });
+        await runCompile(result.tikzCode);
+      } else {
+        toast.info("Auto-fix ran", { description: "No changes were necessary." });
+      }
+    } catch (error) {
+      toast.error("Auto-fix failed", { description: errorMessage(error, "Please try again.") });
+    }
+  };
+
+  const handleUploadClick = () => fileInputRef.current?.click();
+
+  const handleSketchSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setMessages((m) => [...m, { role: "user", content: `Uploaded sketch: ${file.name}` }]);
+    try {
+      const result = await uploadSketchMutation.mutateAsync(file);
+      if (result.tikzCode) {
+        setCode(result.tikzCode);
+        setExplanation(result.explanation ?? "Diagram generated from your sketch.");
+        setMessages((m) => [...m, { role: "assistant", content: "Converted your sketch into TikZ. Compiling now…" }]);
+        await persistProject(result.tikzCode, file.name.replace(/\.[^.]+$/, ""));
+        await runCompile(result.tikzCode);
+      } else {
+        setMessages((m) => [...m, { role: "assistant", content: "Sketch uploaded. Describe what to draw from it." }]);
+      }
+    } catch (error) {
+      const description = errorMessage(error, "Could not reach the upload service.");
+      setMessages((m) => [...m, { role: "assistant", content: `Sorry, sketch upload failed: ${description}` }]);
+      toast.error("Sketch upload failed", { description });
+    }
+  };
+
+  const handleExport = async (format: "pdf" | "png" | "svg" | "tex") => {
+    if (format === "tex") {
+      if (!code.trim()) {
+        toast.error("Nothing to export", { description: "Generate a diagram first." });
+        return;
+      }
+      const blob = new Blob([code], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "diagram.tex";
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Exported diagram.tex");
+      return;
+    }
+
+    if (!projectId) {
+      toast.error("Save your diagram first", { description: "Generate or compile a diagram before exporting." });
+      return;
+    }
+
+    try {
+      const result = await exportMutation.mutateAsync({ format, projectId });
+      window.open(result.url, "_blank", "noopener,noreferrer");
+      toast.success(`Exported ${format.toUpperCase()}`);
+    } catch (error) {
+      toast.error(`Export failed`, { description: errorMessage(error, "Please try again.") });
+    }
   };
 
   return (
     <div className="h-screen flex flex-col">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleSketchSelected}
+      />
+
       {/* Top bar */}
       <div className="h-14 border-b border-border flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
@@ -98,7 +251,9 @@ function Workspace() {
           </div>
           <div className="min-w-0">
             <div className="text-sm font-semibold truncate">Untitled Diagram</div>
-            <div className="text-[10px] text-muted-foreground">Autosaved · just now</div>
+            <div className="text-[10px] text-muted-foreground">
+              {projectId ? "Autosaved · just now" : "Not saved yet"}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-1.5">
@@ -106,7 +261,9 @@ function Workspace() {
           <Button variant="ghost" size="icon"><Redo2 className="h-4 w-4" /></Button>
           <Button variant="ghost" size="icon"><History className="h-4 w-4" /></Button>
           <Button variant="ghost" size="icon"><Share2 className="h-4 w-4" /></Button>
-          <Button size="sm" onClick={() => toast.info("Compiling…")}><Play className="h-4 w-4" /> Compile</Button>
+          <Button size="sm" onClick={handleCompileClick} disabled={compiling}>
+            {compiling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} Compile
+          </Button>
         </div>
       </div>
 
@@ -182,7 +339,9 @@ function Workspace() {
                 />
                 <div className="flex items-center justify-between px-2 pb-2">
                   <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="icon" onClick={() => toast.info("Sketch upload — coming soon")}><Upload className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" onClick={handleUploadClick} disabled={uploadSketchMutation.isPending}>
+                      {uploadSketchMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                    </Button>
                     <Button variant="ghost" size="icon" onClick={() => toast.info("Voice input — coming soon")}><Mic className="h-4 w-4" /></Button>
                   </div>
                   <Button size="sm" onClick={() => send()} disabled={!input.trim() || thinking}>
@@ -210,12 +369,18 @@ function Workspace() {
 
               <TabsContent value="preview" className="flex-1 m-0 p-6 overflow-auto scrollbar-thin">
                 <div className="mx-auto max-w-3xl aspect-[4/3] rounded-2xl border border-border bg-white text-black grid place-items-center relative overflow-hidden">
-                  <div className="absolute inset-0 grid-bg opacity-30" />
-                  <div className="relative text-center px-6">
-                    <FileText className="h-10 w-10 mx-auto mb-3 text-neutral-400" />
-                    <div className="font-display font-semibold">Live PDF preview</div>
-                    <div className="text-sm text-neutral-500 mt-1">Compiled TikZ output renders here.</div>
-                  </div>
+                  {pdfUrl ? (
+                    <iframe title="Compiled PDF preview" src={pdfUrl} className="absolute inset-0 h-full w-full border-0" />
+                  ) : (
+                    <>
+                      <div className="absolute inset-0 grid-bg opacity-30" />
+                      <div className="relative text-center px-6">
+                        <FileText className="h-10 w-10 mx-auto mb-3 text-neutral-400" />
+                        <div className="font-display font-semibold">Live PDF preview</div>
+                        <div className="text-sm text-neutral-500 mt-1">Compiled TikZ output renders here.</div>
+                      </div>
+                    </>
+                  )}
                 </div>
               </TabsContent>
 
@@ -224,17 +389,25 @@ function Workspace() {
                   <div className="flex items-center justify-between px-4 py-2 border-b border-border">
                     <div className="text-xs text-muted-foreground font-mono">diagram.tex</div>
                     <div className="flex gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => { navigator.clipboard.writeText(code); toast.success("Copied TikZ"); }}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          navigator.clipboard.writeText(code);
+                          toast.success("Copied TikZ");
+                        }}
+                      >
                         <Copy className="h-3.5 w-3.5" /> Copy
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => toast.info("Auto-fix ran")}>
-                        <Wand2 className="h-3.5 w-3.5" /> Auto Fix
+                      <Button variant="ghost" size="sm" onClick={handleAutoFix} disabled={autofixMutation.isPending}>
+                        {autofixMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />} Auto Fix
                       </Button>
                     </div>
                   </div>
                   <textarea
                     value={code}
                     onChange={(e) => setCode(e.target.value)}
+                    placeholder="Generated TikZ/LaTeX code will appear here — or write your own."
                     className="flex-1 w-full bg-background font-mono text-xs p-4 outline-none resize-none scrollbar-thin"
                     spellCheck={false}
                   />
@@ -242,39 +415,38 @@ function Workspace() {
               </TabsContent>
 
               <TabsContent value="logs" className="flex-1 m-0 p-4 overflow-auto">
-                <pre className="font-mono text-xs text-muted-foreground whitespace-pre-wrap">
-{`> pdflatex diagram.tex
-This is pdfTeX, Version 3.141592653
-(./diagram.tex LaTeX2e
-Output written on diagram.pdf (1 page).
-Compilation succeeded in 1.42s`}
-                </pre>
+                <pre className="font-mono text-xs text-muted-foreground whitespace-pre-wrap">{logs}</pre>
               </TabsContent>
 
               <TabsContent value="explain" className="flex-1 m-0 p-6 overflow-auto">
                 <div className="prose prose-invert max-w-none text-sm">
                   <h3>How this diagram works</h3>
-                  <p className="text-muted-foreground">
-                    A vertical flowchart with rounded blocks and a diamond decision node.
-                    Arrows use TikZ's positioning library for consistent spacing.
-                  </p>
+                  <p className="text-muted-foreground">{explanation}</p>
                 </div>
               </TabsContent>
             </Tabs>
 
             {/* Bottom toolbar */}
             <div className="border-t border-border p-3 flex flex-wrap items-center gap-1.5">
-              {[
-                { label: "PDF", icon: Download },
-                { label: "PNG", icon: Download },
-                { label: "SVG", icon: Download },
-                { label: "TEX", icon: Download },
-              ].map((b) => (
-                <Button key={b.label} variant="outline" size="sm" onClick={() => toast.success(`Exporting ${b.label}`)}>
-                  <b.icon className="h-3.5 w-3.5" /> {b.label}
+              {([
+                { label: "PDF", format: "pdf" as const },
+                { label: "PNG", format: "png" as const },
+                { label: "SVG", format: "svg" as const },
+                { label: "TEX", format: "tex" as const },
+              ]).map((b) => (
+                <Button
+                  key={b.label}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleExport(b.format)}
+                  disabled={exportMutation.isPending}
+                >
+                  <Download className="h-3.5 w-3.5" /> {b.label}
                 </Button>
               ))}
-              <div className="ml-auto text-xs text-muted-foreground">Compiled in 1.42s · IBM Granite</div>
+              <div className="ml-auto text-xs text-muted-foreground">
+                {compiledMs !== undefined ? `Compiled in ${(compiledMs / 1000).toFixed(2)}s · IBM Granite` : "IBM Granite"}
+              </div>
             </div>
           </div>
         </div>

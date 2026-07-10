@@ -5,9 +5,6 @@ import {
   ArrowUpRight,
   FileCode2,
   Cloud,
-  HardDrive,
-  Activity,
-  Zap,
   Clock,
   Sparkles,
   LayoutTemplate,
@@ -16,6 +13,8 @@ import {
 } from "lucide-react";
 import { PageShell, PageHeader } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useHealth, useProjects } from "@/lib/queries";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -27,28 +26,51 @@ export const Route = createFileRoute("/")({
   component: Dashboard,
 });
 
-const stats = [
-  { label: "Projects", value: "24", icon: FileCode2, delta: "+3 this week" },
-  { label: "Diagrams Generated", value: "182", icon: Sparkles, delta: "+41 this week" },
-  { label: "Storage Used", value: "1.2 GB", icon: HardDrive, delta: "of 5 GB" },
-  { label: "Avg Compile", value: "1.4s", icon: Activity, delta: "-120ms" },
-];
-
-const recent = [
-  { name: "Neural Network — 3 layers", type: "Diagram", updated: "2h ago" },
-  { name: "Login Auth Flowchart", type: "Flowchart", updated: "Yesterday" },
-  { name: "IEEE Paper Figure 3", type: "Research", updated: "2d ago" },
-  { name: "Kubernetes Architecture", type: "Architecture", updated: "3d ago" },
-  { name: "ER Diagram — Bookstore", type: "ER", updated: "5d ago" },
-];
-
 const quickActions = [
   { to: "/workspace", label: "New from prompt", icon: Wand2 },
   { to: "/workspace", label: "Upload sketch", icon: Upload },
   { to: "/templates", label: "Browse templates", icon: LayoutTemplate },
 ];
 
+function relativeTime(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const minutes = Math.round(diffMs / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return `${Math.round(days / 7)}w ago`;
+}
+
+function statusDotClass(status: string | undefined): string {
+  if (status === "Online" || status === "ok") return "bg-emerald-400";
+  if (status === "Idle" || status === "degraded") return "bg-amber-400";
+  return "bg-muted-foreground";
+}
+
 function Dashboard() {
+  const { data: projects, isLoading: projectsLoading } = useProjects();
+  const { data: health, isLoading: healthLoading } = useHealth();
+
+  const recent = (projects ?? [])
+    .slice()
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .slice(0, 5);
+
+  const cloudServices = [
+    { name: "Granite Model", status: health?.services?.["granite"] ?? health?.services?.["watsonx"] },
+    { name: "Cloudant", status: health?.services?.["cloudant"] },
+    { name: "Object Storage", status: health?.services?.["object_storage"] ?? health?.services?.["cos"] },
+    { name: "Code Engine", status: health?.services?.["code_engine"] },
+  ];
+
+  const stats = [
+    { label: "Projects", value: projectsLoading ? "…" : String(projects?.length ?? 0), icon: FileCode2 },
+    { label: "Backend", value: healthLoading ? "Checking…" : health?.status ?? "Unreachable", icon: Sparkles },
+  ];
+
   return (
     <PageShell>
       <PageHeader
@@ -77,7 +99,8 @@ function Dashboard() {
       >
         <div className="relative p-8 sm:p-12">
           <div className="inline-flex items-center gap-2 rounded-full glass px-3 py-1 text-xs">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> IBM Granite · Ready
+            <span className={`h-1.5 w-1.5 rounded-full ${healthLoading ? "bg-muted-foreground" : statusDotClass(health?.status)}`} />
+            IBM Granite · {healthLoading ? "Checking…" : health?.status === "ok" ? "Ready" : "Unavailable"}
           </div>
           <h2 className="mt-4 text-3xl sm:text-5xl font-bold max-w-2xl leading-tight">
             From prompt to publication-ready <span className="text-muted-foreground">TikZ</span>.
@@ -97,7 +120,7 @@ function Dashboard() {
       </motion.div>
 
       {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-10">
+      <div className="grid gap-4 sm:grid-cols-2 mb-10">
         {stats.map((s, i) => (
           <motion.div
             key={s.label}
@@ -111,7 +134,6 @@ function Dashboard() {
               <s.icon className="h-4 w-4 text-muted-foreground" />
             </div>
             <div className="mt-3 text-3xl font-bold">{s.value}</div>
-            <div className="mt-1 text-xs text-muted-foreground">{s.delta}</div>
           </motion.div>
         ))}
       </div>
@@ -128,22 +150,37 @@ function Dashboard() {
               <Link to="/projects">View all <ArrowUpRight className="h-3 w-3" /></Link>
             </Button>
           </div>
-          <ul className="divide-y divide-border">
-            {recent.map((r) => (
-              <li key={r.name} className="flex items-center gap-4 p-4 hover:bg-accent/40 transition-colors">
-                <div className="h-9 w-9 rounded-lg bg-muted grid place-items-center shrink-0">
-                  <FileCode2 className="h-4 w-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium truncate">{r.name}</div>
-                  <div className="text-xs text-muted-foreground">{r.type}</div>
-                </div>
-                <div className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
-                  <Clock className="h-3 w-3" /> {r.updated}
-                </div>
-              </li>
-            ))}
-          </ul>
+
+          {projectsLoading && (
+            <div className="p-4 space-y-2">
+              {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-lg" />)}
+            </div>
+          )}
+
+          {!projectsLoading && recent.length === 0 && (
+            <div className="p-8 text-center text-sm text-muted-foreground">
+              No projects yet — start one from the workspace.
+            </div>
+          )}
+
+          {!projectsLoading && recent.length > 0 && (
+            <ul className="divide-y divide-border">
+              {recent.map((r) => (
+                <li key={r.id} className="flex items-center gap-4 p-4 hover:bg-accent/40 transition-colors">
+                  <div className="h-9 w-9 rounded-lg bg-muted grid place-items-center shrink-0">
+                    <FileCode2 className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium truncate">{r.name}</div>
+                    <div className="text-xs text-muted-foreground">{r.diagramType ?? "Diagram"}</div>
+                  </div>
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+                    <Clock className="h-3 w-3" /> {relativeTime(r.updatedAt)}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <div className="rounded-2xl border border-border bg-card p-5 space-y-5">
@@ -151,25 +188,19 @@ function Dashboard() {
             <div className="flex items-center gap-2 text-sm font-semibold">
               <Cloud className="h-4 w-4" /> IBM Cloud
             </div>
-            <div className="text-xs text-muted-foreground">Lite services status</div>
+            <div className="text-xs text-muted-foreground">Live service status</div>
           </div>
-          {[
-            { name: "Granite Model", status: "Online" },
-            { name: "Cloudant", status: "Online" },
-            { name: "Object Storage", status: "Online" },
-            { name: "Code Engine", status: "Idle" },
-            { name: "App ID", status: "Not configured" },
-          ].map((svc) => (
+          {cloudServices.map((svc) => (
             <div key={svc.name} className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">{svc.name}</span>
               <span className="inline-flex items-center gap-1.5">
-                <span className={`h-1.5 w-1.5 rounded-full ${svc.status === "Online" ? "bg-emerald-400" : svc.status === "Idle" ? "bg-amber-400" : "bg-muted-foreground"}`} />
-                <span className="text-xs">{svc.status}</span>
+                <span className={`h-1.5 w-1.5 rounded-full ${healthLoading ? "bg-muted-foreground" : statusDotClass(svc.status)}`} />
+                <span className="text-xs">{healthLoading ? "Checking…" : svc.status ?? "Unknown"}</span>
               </span>
             </div>
           ))}
           <Button asChild variant="outline" className="w-full">
-            <Link to="/developer"><Zap className="h-4 w-4" /> View diagnostics</Link>
+            <Link to="/developer"><ArrowUpRight className="h-4 w-4" /> View diagnostics</Link>
           </Button>
         </div>
       </div>
