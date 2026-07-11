@@ -20,6 +20,12 @@ router = APIRouter(tags=["generate"])
 async def generate(request: GenerateRequest) -> GenerateResponse:
     try:
         return await generation_service.generate_diagram(request)
+    except generation_service.GenerationValidationError as exc:
+        logger.warning("Granite returned unusable diagram output: %s", exc)
+        raise HTTPException(
+            status_code=422,
+            detail="The AI did not return a usable TikZ diagram after retrying. Please try again.",
+        ) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:

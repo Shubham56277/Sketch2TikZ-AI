@@ -56,22 +56,34 @@ async def generate_diagram(request: GenerateRequest) -> GenerateResponse:
     )
 
     logger.info("generate: model=%s diagram_type=%s", settings.watsonx_text_model_id, request.diagram_type)
-    raw = await watsonx_client.generate_text(prompts.TIKZ_SYSTEM_PROMPT, user_prompt)
-    parsed = parse_model_response(raw)
-    logger.info("generate: sanitized code length=%d chars", len(parsed.code))
+    parsed = None
+    validation = None
+    for attempt in range(1, settings.autofix_max_attempts + 1):
+        attempt_prompt = user_prompt
+        if attempt > 1:
+            attempt_prompt += (
+                "\n\nYour previous response was not a usable TikZ diagram. "
+                "Do not refuse or explain. Return a concrete diagram containing "
+                "\\node and \\draw commands in the required tagged format."
+            )
+        raw = await watsonx_client.generate_text(prompts.TIKZ_SYSTEM_PROMPT, attempt_prompt)
+        parsed = parse_model_response(raw)
+        logger.info("generate: attempt=%d sanitized code length=%d chars", attempt, len(parsed.code))
+        validation = validate_document(normalize_document(parsed.code))
+        if validation.valid:
+            break
+        logger.warning("generate: attempt=%d failed validation: %s", attempt, validation.errors)
 
-    document = normalize_document(parsed.code)
-    validation = validate_document(document)
-    validation_errors = validation.errors if not validation.valid else None
-    if validation_errors:
-        logger.warning("generate: sanitized output still fails validation: %s", validation_errors)
+    assert parsed is not None and validation is not None
+    if not validation.valid:
+        raise GenerationValidationError(validation.errors, parsed.code)
 
     return GenerateResponse(
         code=parsed.code,
         explanation=parsed.explanation,
         diagram_type=request.diagram_type,
         model_id=settings.watsonx_text_model_id,
-        validation_errors=validation_errors,
+        validation_errors=None,
     )
 
 

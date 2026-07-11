@@ -130,6 +130,14 @@ class TestValidateDocument:
         assert not result.valid
         assert any("diagram environment" in e.lower() for e in result.errors)
 
+    def test_model_refusal_wrapped_in_tikzpicture_is_rejected(self):
+        refusal = normalize_document(
+            "\\begin{tikzpicture}I'm unable to fulfil this request.\\end{tikzpicture}"
+        )
+        result = validate_document(refusal)
+        assert not result.valid
+        assert any("drawing commands" in error.lower() for error in result.errors)
+
     def test_valid_tikz_snippet_after_normalization_passes(self):
         snippet = "\\begin{tikzpicture}\\node{A};\\end{tikzpicture}"
         result = validate_document(normalize_document(snippet))

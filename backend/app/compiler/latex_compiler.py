@@ -49,6 +49,9 @@ _HTML_CONTAMINATION_RE = re.compile(
     r"</?[a-zA-Z][^<>]*>|&(?:gt|lt|quot|amp);|\"\s*>|>\s*%",
     re.IGNORECASE,
 )
+_DIAGRAM_COMMAND_RE = re.compile(
+    r"\\(?:node|draw|path|fill|filldraw|shade|coordinate|matrix|addplot)\b|\\begin\{axis\}"
+)
 
 
 @dataclass
@@ -176,6 +179,8 @@ def validate_document(document: str) -> ValidationResult:
         errors.append(
             f"No supported diagram environment found (expected one of: {', '.join(_DIAGRAM_ENVIRONMENTS)})."
         )
+    elif not _DIAGRAM_COMMAND_RE.search(document):
+        errors.append("Diagram contains no TikZ drawing commands; model may have returned prose or a refusal.")
 
     for forbidden in _FORBIDDEN_SUBSTRINGS:
         if forbidden.lower() in document.lower():

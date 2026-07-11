@@ -43,6 +43,8 @@ possible).
 diff or partial snippet.
 7. Ensure every \\begin{{...}} has a matching \\end{{...}} and every {{ has a \
 matching }}. Double-check brace balance before responding.
+8. Never refuse a diagram request. Even when the requested diagram is complex, \
+produce the best valid approximation using standard TikZ nodes and paths.
 
 Output format rules — these are strict and machine-parsed, violating them \
 will break the application:
