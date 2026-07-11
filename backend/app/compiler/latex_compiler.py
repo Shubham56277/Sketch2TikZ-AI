@@ -29,6 +29,14 @@ from app.config import get_settings
 
 logger = logging.getLogger("sketch2tikz.compiler")
 
+_FRESH_PALETTE = r"""\definecolor{FreshBlue}{HTML}{0F62FE}
+\definecolor{FreshNavy}{HTML}{161616}
+\definecolor{FreshTeal}{HTML}{007D79}
+\definecolor{FreshViolet}{HTML}{8A3FFC}
+\definecolor{FreshAmber}{HTML}{F1C21B}
+\definecolor{FreshGreen}{HTML}{198038}
+\definecolor{FreshRose}{HTML}{DA1E28}"""
+
 _DOCUMENT_TEMPLATE = r"""\documentclass[tikz,border=4pt]{{standalone}}
 \usepackage{{tikz}}
 \usepackage{{pgfplots}}
@@ -38,6 +46,7 @@ _DOCUMENT_TEMPLATE = r"""\documentclass[tikz,border=4pt]{{standalone}}
   calc,fit,backgrounds,decorations.pathreplacing,decorations.markings,
   patterns,mindmap,trees,automata,chains
 }}
+{palette}
 \begin{{document}}
 {body}
 \end{{document}}
@@ -109,7 +118,7 @@ def normalize_document(code: str) -> str:
     stripped = code.strip()
 
     if "\\documentclass" not in stripped:
-        return _DOCUMENT_TEMPLATE.format(body=stripped)
+        return _DOCUMENT_TEMPLATE.format(body=stripped, palette=_FRESH_PALETTE)
 
     has_begin_document = "\\begin{document}" in stripped
     has_end_document = "\\end{document}" in stripped
@@ -126,6 +135,15 @@ def normalize_document(code: str) -> str:
             stripped = stripped[:insertion_point] + "\\begin{document}\n" + stripped[insertion_point:]
         else:
             stripped += "\n\\begin{document}\n"
+
+    # The visual-review model may use the product palette without repeating
+    # its declarations. Inject them into full documents as well as snippets.
+    if "Fresh" in stripped and "\\definecolor{FreshBlue}" not in stripped:
+        stripped = stripped.replace(
+            "\\begin{document}",
+            f"{_FRESH_PALETTE}\n\\begin{{document}}",
+            1,
+        )
 
     if not has_end_document:
         stripped += "\n\\end{document}\n"

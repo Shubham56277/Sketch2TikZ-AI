@@ -13,6 +13,24 @@ from tests.test_response_parser import MALFORMED_LOGIN_FLOWCHART
 
 
 class TestNormalizeDocument:
+    def test_wrapper_defines_official_fresh_palette(self):
+        result = normalize_document(
+            r"\begin{tikzpicture}\node[draw=FreshBlue]{A};\end{tikzpicture}"
+        )
+        assert r"\definecolor{FreshBlue}{HTML}{0F62FE}" in result
+        assert r"\definecolor{FreshRose}{HTML}{DA1E28}" in result
+
+    def test_full_document_gets_missing_fresh_palette(self):
+        document = (
+            r"\documentclass[tikz]{standalone}"
+            r"\begin{document}"
+            r"\begin{tikzpicture}\node[draw=FreshTeal]{A};\end{tikzpicture}"
+            r"\end{document}"
+        )
+        result = normalize_document(document)
+        assert r"\definecolor{FreshTeal}{HTML}{007D79}" in result
+        assert result.index(r"\definecolor{FreshTeal}") < result.index(r"\begin{document}")
+
     def test_wraps_bare_tikzpicture_snippet_in_full_document(self):
         result = normalize_document("\\begin{tikzpicture}\\node{A};\\end{tikzpicture}")
         assert result.count("\\documentclass") == 1
