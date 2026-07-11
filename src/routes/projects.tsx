@@ -35,20 +35,21 @@ function errorMessage(error: unknown, fallback: string): string {
 
 function Projects() {
   const [query, setQuery] = useState("");
-  const { data: projects, isLoading, isError, error } = useProjects();
+  const { data: projectList, isLoading, isError, error } = useProjects();
   const updateProject = useUpdateProject();
   const deleteProject = useDeleteProject();
 
+  const projects = projectList?.items ?? [];
+
   const filtered = useMemo(() => {
-    if (!projects) return [];
     const q = query.trim().toLowerCase();
     if (!q) return projects;
     return projects.filter((p) => p.name.toLowerCase().includes(q));
   }, [projects, query]);
 
-  const toggleStar = (id: string, starred: boolean) => {
+  const toggleStar = (id: string, isFavorite: boolean) => {
     updateProject.mutate(
-      { id, payload: { starred: !starred } },
+      { id, payload: { is_favorite: !isFavorite } },
       { onError: (err) => toast.error("Couldn't update project", { description: errorMessage(err, "Please try again.") }) },
     );
   };
@@ -120,8 +121,8 @@ function Projects() {
                   <FileCode2 className="h-5 w-5" />
                 </div>
                 <div className="flex items-center gap-1">
-                  <button onClick={() => toggleStar(p.id, !!p.starred)} aria-label={p.starred ? "Unstar" : "Star"}>
-                    <Star className={`h-4 w-4 ${p.starred ? "fill-foreground" : "opacity-0 group-hover:opacity-60"}`} />
+                  <button onClick={() => toggleStar(p.id, !!p.is_favorite)} aria-label={p.is_favorite ? "Unstar" : "Star"}>
+                    <Star className={`h-4 w-4 ${p.is_favorite ? "fill-foreground" : "opacity-0 group-hover:opacity-60"}`} />
                   </button>
                   <button
                     onClick={() => removeProject(p.id, p.name)}
@@ -135,7 +136,7 @@ function Projects() {
               </div>
               <Link to="/workspace" className="block mt-4">
                 <div className="font-medium truncate">{p.name}</div>
-                <div className="mt-1 text-xs text-muted-foreground">{p.diagramType ?? "Diagram"} · {relativeTime(p.updatedAt)}</div>
+                <div className="mt-1 text-xs text-muted-foreground">{p.diagram_type ?? "Diagram"} · {relativeTime(p.updated_at)}</div>
               </Link>
             </motion.div>
           ))}

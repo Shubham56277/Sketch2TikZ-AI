@@ -8,9 +8,11 @@ import { endpoints } from "@/lib/api";
 import type {
   AutofixRequest,
   CompileRequest,
-  CreateProjectRequest,
+  DiagramType,
+  ExportFormat,
   GenerateRequest,
-  UpdateProjectRequest,
+  ProjectCreate,
+  ProjectUpdate,
 } from "@/lib/api-types";
 
 export const queryKeys = {
@@ -32,8 +34,16 @@ export function useHealth() {
 export function useProjects() {
   return useQuery({
     queryKey: queryKeys.projects,
-    queryFn: endpoints.listProjects,
+    queryFn: () => endpoints.listProjects(),
     staleTime: 10_000,
+  });
+}
+
+export function useProject(id: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.project(id ?? ""),
+    queryFn: () => endpoints.getProject(id as string),
+    enabled: !!id,
   });
 }
 
@@ -57,14 +67,15 @@ export function useAutofixDiagram() {
 
 export function useUploadSketch() {
   return useMutation({
-    mutationFn: (file: File) => endpoints.uploadSketch(file),
+    mutationFn: ({ file, diagramType, projectId }: { file: File; diagramType?: DiagramType; projectId?: string }) =>
+      endpoints.uploadSketch(file, diagramType, projectId),
   });
 }
 
 export function useCreateProject() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: CreateProjectRequest) => endpoints.createProject(payload),
+    mutationFn: (payload: ProjectCreate) => endpoints.createProject(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.projects });
     },
@@ -74,7 +85,7 @@ export function useCreateProject() {
 export function useUpdateProject() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: UpdateProjectRequest }) =>
+    mutationFn: ({ id, payload }: { id: string; payload: ProjectUpdate }) =>
       endpoints.updateProject(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.projects });
@@ -94,10 +105,7 @@ export function useDeleteProject() {
 
 export function useExportDiagram() {
   return useMutation({
-    mutationFn: ({ format, projectId }: { format: "pdf" | "png" | "svg"; projectId: string }) => {
-      if (format === "pdf") return endpoints.exportPdf(projectId);
-      if (format === "png") return endpoints.exportPng(projectId);
-      return endpoints.exportSvg(projectId);
-    },
+    mutationFn: ({ format, code, projectId }: { format: ExportFormat; code: string; projectId?: string }) =>
+      endpoints.export(format, code, projectId),
   });
 }

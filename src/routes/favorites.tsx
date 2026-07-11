@@ -18,8 +18,8 @@ function errorMessage(error: unknown, fallback: string): string {
 }
 
 function Favorites() {
-  const { data: projects, isLoading, isError, error } = useProjects();
-  const starred = useMemo(() => (projects ?? []).filter((p) => p.starred), [projects]);
+  const { data: projectList, isLoading, isError, error } = useProjects();
+  const starred = useMemo(() => (projectList?.items ?? []).filter((p) => p.is_favorite), [projectList]);
 
   return (
     <PageShell>

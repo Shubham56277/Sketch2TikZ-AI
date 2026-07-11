@@ -1,91 +1,156 @@
 /**
  * Shared request/response types for the Sketch2TikZ AI backend API.
- * Mirrors the FastAPI contract: /health, /generate, /compile, /upload-sketch,
- * /autofix, /projects (CRUD), /export/{pdf,png,svg}.
+ * These mirror the FastAPI/Pydantic models exactly (field names, casing,
+ * shapes) — see backend/app/models/*.py. FastAPI emits snake_case JSON by
+ * default (no camelCase alias generator is configured on the backend), so
+ * these types intentionally use snake_case rather than the JS convention.
  */
 
 export type DiagramType =
   | "flowchart"
-  | "uml"
-  | "er"
-  | "circuit"
+  | "uml_class"
+  | "er_diagram"
+  | "circuit_tikz"
   | "pgfplots"
-  | "mindmap"
+  | "mind_map"
   | "network"
-  | "sequence"
-  | "state"
-  | "other";
+  | "generic";
 
-export interface Project {
-  id: string;
-  name: string;
-  tikzCode: string;
-  diagramType?: DiagramType;
-  starred?: boolean;
-  createdAt: string;
-  updatedAt: string;
-  pdfUrl?: string;
-  pngUrl?: string;
-  svgUrl?: string;
-  sketchUrl?: string;
+export type ExportFormat = "pdf" | "png" | "svg" | "tex";
+
+export type CompileStatus = "success" | "failed" | "timeout";
+
+export interface HealthResponse {
+  status: string;
+  watsonx_configured: boolean;
+  cloudant_configured: boolean;
+  object_storage_configured: boolean;
+}
+
+export interface ChatTurn {
+  role: "user" | "assistant";
+  content: string;
 }
 
 export interface GenerateRequest {
   prompt: string;
-  diagramType?: DiagramType;
-  projectId?: string;
+  diagram_type?: DiagramType;
+  history?: ChatTurn[];
+  project_id?: string;
+  existing_code?: string;
 }
 
 export interface GenerateResponse {
-  tikzCode: string;
-  explanation?: string;
-}
-
-export interface CompileRequest {
-  tikzCode: string;
-  engine?: "pdflatex" | "xelatex" | "lualatex";
-}
-
-export interface CompileResponse {
-  success: boolean;
-  pdfUrl?: string;
-  logs?: string;
-  error?: string;
-  durationMs?: number;
+  code: string;
+  explanation: string;
+  diagram_type: DiagramType;
+  model_id: string;
+  compile_status?: CompileStatus;
+  compile_log?: string;
+  pdf_url?: string;
 }
 
 export interface AutofixRequest {
-  tikzCode: string;
-  errorLog?: string;
+  code: string;
+  error_log: string;
+  project_id?: string;
 }
 
 export interface AutofixResponse {
-  tikzCode: string;
-  explanation?: string;
+  code: string;
+  explanation: string;
   fixed: boolean;
+  attempts: number;
+  compile_status?: CompileStatus;
+  compile_log?: string;
+  pdf_url?: string;
+}
+
+export interface CompileRequest {
+  code: string;
+  project_id?: string;
+}
+
+export interface CompileResponse {
+  status: CompileStatus;
+  log: string;
+  pdf_url?: string;
+  duration_ms?: number;
+}
+
+export interface ExportRequest {
+  code: string;
+  project_id?: string;
+  format: ExportFormat;
+}
+
+export interface ExportResponse {
+  format: ExportFormat;
+  url: string;
+  duration_ms?: number;
 }
 
 export interface UploadSketchResponse {
-  sketchUrl: string;
-  tikzCode?: string;
+  code: string;
+  explanation: string;
+  diagram_type: DiagramType;
+  model_id: string;
+  sketch_url: string;
+  project_id?: string;
+}
+
+export interface ProjectVersion {
+  version_id: string;
+  code: string;
   explanation?: string;
+  pdf_url?: string;
+  created_at: string;
+  created_by: string;
 }
 
-export interface HealthResponse {
-  status: "ok" | "degraded" | "down" | string;
-  services?: Record<string, string>;
-  latencyMs?: number;
-}
-
-export interface CreateProjectRequest {
+export interface ProjectCreate {
   name: string;
-  tikzCode?: string;
-  diagramType?: DiagramType;
+  diagram_type?: DiagramType;
+  code?: string;
+  explanation?: string;
+  is_favorite?: boolean;
 }
 
-export interface UpdateProjectRequest {
+export interface ProjectUpdate {
   name?: string;
-  tikzCode?: string;
-  starred?: boolean;
-  diagramType?: DiagramType;
+  diagram_type?: DiagramType;
+  code?: string;
+  explanation?: string;
+  is_favorite?: boolean;
+  pdf_url?: string;
+  save_as_new_version?: boolean;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  diagram_type: DiagramType;
+  code: string;
+  explanation?: string;
+  pdf_url?: string;
+  is_favorite: boolean;
+  owner_id: string;
+  versions: ProjectVersion[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectListItem {
+  id: string;
+  name: string;
+  diagram_type: DiagramType;
+  pdf_url?: string;
+  is_favorite: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectListResponse {
+  items: ProjectListItem[];
+  total: number;
 }

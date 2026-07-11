@@ -50,24 +50,29 @@ function statusDotClass(status: string | undefined): string {
   return "bg-muted-foreground";
 }
 
+function boolToStatus(configured: boolean | undefined, loading: boolean): string | undefined {
+  if (loading || configured === undefined) return undefined;
+  return configured ? "ok" : "degraded";
+}
+
 function Dashboard() {
-  const { data: projects, isLoading: projectsLoading } = useProjects();
+  const { data: projectList, isLoading: projectsLoading } = useProjects();
   const { data: health, isLoading: healthLoading } = useHealth();
 
-  const recent = (projects ?? [])
+  const projects = projectList?.items ?? [];
+  const recent = projects
     .slice()
-    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
     .slice(0, 5);
 
   const cloudServices = [
-    { name: "Granite Model", status: health?.services?.["granite"] ?? health?.services?.["watsonx"] },
-    { name: "Cloudant", status: health?.services?.["cloudant"] },
-    { name: "Object Storage", status: health?.services?.["object_storage"] ?? health?.services?.["cos"] },
-    { name: "Code Engine", status: health?.services?.["code_engine"] },
+    { name: "Granite Model", status: boolToStatus(health?.watsonx_configured, healthLoading) },
+    { name: "Cloudant", status: boolToStatus(health?.cloudant_configured, healthLoading) },
+    { name: "Object Storage", status: boolToStatus(health?.object_storage_configured, healthLoading) },
   ];
 
   const stats = [
-    { label: "Projects", value: projectsLoading ? "…" : String(projects?.length ?? 0), icon: FileCode2 },
+    { label: "Projects", value: projectsLoading ? "…" : String(projectList?.total ?? 0), icon: FileCode2 },
     { label: "Backend", value: healthLoading ? "Checking…" : health?.status ?? "Unreachable", icon: Sparkles },
   ];
 
@@ -99,8 +104,8 @@ function Dashboard() {
       >
         <div className="relative p-8 sm:p-12">
           <div className="inline-flex items-center gap-2 rounded-full glass px-3 py-1 text-xs">
-            <span className={`h-1.5 w-1.5 rounded-full ${healthLoading ? "bg-muted-foreground" : statusDotClass(health?.status)}`} />
-            IBM Granite · {healthLoading ? "Checking…" : health?.status === "ok" ? "Ready" : "Unavailable"}
+            <span className={`h-1.5 w-1.5 rounded-full ${healthLoading ? "bg-muted-foreground" : statusDotClass(health?.watsonx_configured ? "ok" : "degraded")}`} />
+            IBM Granite · {healthLoading ? "Checking…" : health?.watsonx_configured ? "Ready" : "Unavailable"}
           </div>
           <h2 className="mt-4 text-3xl sm:text-5xl font-bold max-w-2xl leading-tight">
             From prompt to publication-ready <span className="text-muted-foreground">TikZ</span>.
@@ -172,10 +177,10 @@ function Dashboard() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium truncate">{r.name}</div>
-                    <div className="text-xs text-muted-foreground">{r.diagramType ?? "Diagram"}</div>
+                    <div className="text-xs text-muted-foreground">{r.diagram_type ?? "Diagram"}</div>
                   </div>
                   <div className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
-                    <Clock className="h-3 w-3" /> {relativeTime(r.updatedAt)}
+                    <Clock className="h-3 w-3" /> {relativeTime(r.updated_at)}
                   </div>
                 </li>
               ))}

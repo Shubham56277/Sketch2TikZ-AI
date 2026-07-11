@@ -103,9 +103,9 @@ function SettingsPage() {
     toast.success("Settings saved");
   };
 
-  const graniteStatus = health?.services?.["granite"] ?? health?.services?.["watsonx"] ?? health?.status;
-  const cloudantStatus = health?.services?.["cloudant"];
-  const cosStatus = health?.services?.["object_storage"] ?? health?.services?.["cos"];
+  const graniteStatus = health === undefined ? undefined : health.watsonx_configured ? "ok" : "degraded";
+  const cloudantStatus = health === undefined ? undefined : health.cloudant_configured ? "ok" : "degraded";
+  const cosStatus = health === undefined ? undefined : health.object_storage_configured ? "ok" : "degraded";
 
   return (
     <PageShell>

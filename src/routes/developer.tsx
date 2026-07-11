@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { PageShell, PageHeader } from "@/components/page-shell";
-import { Activity, Cloud, HardDrive, Timer, Cpu } from "lucide-react";
+import { Activity, Cloud, HardDrive, Cpu } from "lucide-react";
 import { useHealth } from "@/lib/queries";
 import { ApiError } from "@/lib/api-client";
 
@@ -24,7 +24,13 @@ function errorMessage(error: unknown, fallback: string): string {
 function Developer() {
   const { data: health, isLoading, isError, error, isFetched } = useHealth();
 
-  const services = Object.entries(health?.services ?? {}).map(([name, status]) => ({ name, status }));
+  const services = health
+    ? [
+        { name: "watsonx.ai (Granite)", status: health.watsonx_configured ? "ok" : "degraded" },
+        { name: "Cloudant", status: health.cloudant_configured ? "ok" : "degraded" },
+        { name: "Object Storage", status: health.object_storage_configured ? "ok" : "degraded" },
+      ]
+    : [];
 
   return (
     <PageShell>
@@ -33,7 +39,6 @@ function Developer() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
         {[
           { label: "API", value: isLoading ? "Checking…" : isError ? "Unreachable" : `${health?.status ?? "unknown"}`, icon: Activity },
-          { label: "Model latency", value: health?.latencyMs !== undefined ? `${health.latencyMs} ms` : "—", icon: Timer },
           { label: "Storage", value: "—", icon: HardDrive },
           { label: "CPU", value: "—", icon: Cpu },
         ].map((s) => (

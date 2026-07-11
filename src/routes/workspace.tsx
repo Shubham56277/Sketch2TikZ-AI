@@ -25,7 +25,7 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ApiError } from "@/lib/api-client";
+import { ApiError, API_BASE_URL } from "@/lib/api-client";
 import {
   useAutofixDiagram,
   useCompileDiagram,
@@ -90,14 +90,14 @@ function Workspace() {
   const compiling = compileMutation.isPending;
 
   /** Persist the current TikZ code as a project — creates on first save, updates after. */
-  const persistProject = async (tikzCode: string, name = "Untitled Diagram") => {
+  const persistProject = async (code: string, name = "Untitled Diagram") => {
     try {
       if (!projectId) {
-        const project = await createProjectMutation.mutateAsync({ name, tikzCode });
+        const project = await createProjectMutation.mutateAsync({ name, code });
         setProjectId(project.id);
         return project.id;
       }
-      await updateProjectMutation.mutateAsync({ id: projectId, payload: { tikzCode } });
+      await updateProjectMutation.mutateAsync({ id: projectId, payload: { code } });
       return projectId;
     } catch (error) {
       toast.error("Couldn't save project", { description: errorMessage(error, "Please try again.") });
@@ -105,16 +105,18 @@ function Workspace() {
     }
   };
 
-  const runCompile = async (tikzCode: string) => {
+  const toAbsoluteAssetUrl = (url: string) => (url.startsWith("http") ? url : `${API_BASE_URL}${url}`);
+
+  const runCompile = async (code: string) => {
     try {
-      const result = await compileMutation.mutateAsync({ tikzCode });
-      setLogs(result.logs ?? (result.success ? "Compilation succeeded." : "Compilation failed."));
-      setCompiledMs(result.durationMs);
-      if (result.success && result.pdfUrl) {
-        setPdfUrl(result.pdfUrl);
+      const result = await compileMutation.mutateAsync({ code, project_id: projectId });
+      setLogs(result.log ?? (result.status === "success" ? "Compilation succeeded." : "Compilation failed."));
+      setCompiledMs(result.duration_ms);
+      if (result.status === "success" && result.pdf_url) {
+        setPdfUrl(toAbsoluteAssetUrl(result.pdf_url));
         toast.success("Diagram compiled", { description: "PDF preview updated." });
       } else {
-        toast.error("Compilation failed", { description: result.error ?? "Check the Logs tab for details." });
+        toast.error("Compilation failed", { description: "Check the Logs tab for details." });
       }
       return result;
     } catch (error) {
@@ -132,15 +134,19 @@ function Workspace() {
     setInput("");
 
     try {
-      const result = await generateMutation.mutateAsync({ prompt: value, projectId });
-      setCode(result.tikzCode);
-      setExplanation(result.explanation ?? "Diagram generated from your prompt.");
+      const result = await generateMutation.mutateAsync({
+        prompt: value,
+        project_id: projectId,
+        existing_code: code || undefined,
+      });
+      setCode(result.code);
+      setExplanation(result.explanation || "Diagram generated from your prompt.");
       setMessages((m) => [
         ...m,
         { role: "assistant", content: "Generated a TikZ diagram based on your prompt. Compiling now…" },
       ]);
-      await persistProject(result.tikzCode, value.slice(0, 60));
-      await runCompile(result.tikzCode);
+      await persistProject(result.code, value.slice(0, 60));
+      await runCompile(result.code);
     } catch (error) {
       const description = errorMessage(error, "Could not reach the generation service.");
       setMessages((m) => [...m, { role: "assistant", content: `Sorry, generation failed: ${description}` }]);
@@ -162,12 +168,13 @@ function Workspace() {
       return;
     }
     try {
-      const result = await autofixMutation.mutateAsync({ tikzCode: code, errorLog: logs });
-      setCode(result.tikzCode);
+      const result = await autofixMutation.mutateAsync({ code, error_log: logs, project_id: projectId });
+      setCode(result.code);
       if (result.explanation) setExplanation(result.explanation);
       if (result.fixed) {
         toast.success("Auto-fix applied", { description: "Recompiling…" });
-        await runCompile(result.tikzCode);
+        if (result.pdf_url) setPdfUrl(toAbsoluteAssetUrl(result.pdf_url));
+        await runCompile(result.code);
       } else {
         toast.info("Auto-fix ran", { description: "No changes were necessary." });
       }
@@ -185,13 +192,13 @@ function Workspace() {
 
     setMessages((m) => [...m, { role: "user", content: `Uploaded sketch: ${file.name}` }]);
     try {
-      const result = await uploadSketchMutation.mutateAsync(file);
-      if (result.tikzCode) {
-        setCode(result.tikzCode);
-        setExplanation(result.explanation ?? "Diagram generated from your sketch.");
+      const result = await uploadSketchMutation.mutateAsync({ file, projectId });
+      if (result.code) {
+        setCode(result.code);
+        setExplanation(result.explanation || "Diagram generated from your sketch.");
         setMessages((m) => [...m, { role: "assistant", content: "Converted your sketch into TikZ. Compiling now…" }]);
-        await persistProject(result.tikzCode, file.name.replace(/\.[^.]+$/, ""));
-        await runCompile(result.tikzCode);
+        await persistProject(result.code, file.name.replace(/\.[^.]+$/, ""));
+        await runCompile(result.code);
       } else {
         setMessages((m) => [...m, { role: "assistant", content: "Sketch uploaded. Describe what to draw from it." }]);
       }
@@ -219,14 +226,15 @@ function Workspace() {
       return;
     }
 
-    if (!projectId) {
-      toast.error("Save your diagram first", { description: "Generate or compile a diagram before exporting." });
+    if (!code.trim()) {
+      toast.error("Nothing to export", { description: "Generate or write some TikZ code first." });
       return;
     }
 
     try {
-      const result = await exportMutation.mutateAsync({ format, projectId });
-      window.open(result.url, "_blank", "noopener,noreferrer");
+      const result = await exportMutation.mutateAsync({ format, code, projectId });
+      const absoluteUrl = result.url.startsWith("http") ? result.url : `${API_BASE_URL}${result.url}`;
+      window.open(absoluteUrl, "_blank", "noopener,noreferrer");
       toast.success(`Exported ${format.toUpperCase()}`);
     } catch (error) {
       toast.error(`Export failed`, { description: errorMessage(error, "Please try again.") });
