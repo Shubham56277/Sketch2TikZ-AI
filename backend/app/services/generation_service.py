@@ -78,6 +78,29 @@ async def generate_diagram(request: GenerateRequest) -> GenerateResponse:
     if not validation.valid:
         raise GenerationValidationError(validation.errors, parsed.code)
 
+    # Structural validation catches malformed LaTeX, but it cannot see visual
+    # collisions. A dedicated second model pass acts as an art director and
+    # rebuilds the valid draft under a much stricter spacing/style contract.
+    review_prompt = prompts.build_visual_review_prompt(parsed.code, parsed.explanation)
+    try:
+        reviewed_raw = await watsonx_client.generate_text(
+            prompts.VISUAL_REVIEW_SYSTEM_PROMPT,
+            review_prompt,
+        )
+        reviewed = parse_model_response(reviewed_raw)
+        reviewed_validation = validate_document(normalize_document(reviewed.code))
+        if reviewed_validation.valid:
+            parsed = reviewed
+            logger.info("generate: visual review accepted (%d chars)", len(parsed.code))
+        else:
+            logger.warning(
+                "generate: visual review rejected; retaining valid draft: %s",
+                reviewed_validation.errors,
+            )
+    except Exception:
+        # A review outage should not discard the structurally valid first pass.
+        logger.exception("generate: visual review failed; retaining valid draft")
+
     return GenerateResponse(
         code=parsed.code,
         explanation=parsed.explanation,

@@ -197,6 +197,35 @@ Example of a correctly formatted response:
 {_KNOWN_GOOD_EXAMPLE}
 """
 
+VISUAL_REVIEW_SYSTEM_PROMPT = r"""You are the final art director and TikZ layout
+engine for Sketch2TikZ AI. You receive an already valid TikZ diagram and must
+return a fully rebuilt, publication-ready version of the same diagram.
+
+This is a mandatory correction pass, not a critique. Preserve the meaning but
+fix the code itself. Apply every requirement below:
+- No two node bounding boxes may touch or overlap. No arrow or edge label may
+  cross a node, node label, or another edge label.
+- Use at least 14mm of empty edge-to-edge vertical space and 22mm horizontal
+  space. `node distance` alone is not proof of clearance; consider full sizes.
+- A decision has its own row. Its outcomes use separate left/right lanes on the
+  next row. A merge or terminal uses a later centered row.
+- Never draw separate result and End nodes in the same position. If a result is
+  terminal, omit the redundant End node. Otherwise put End at least 14mm below.
+- Avoid a thin vertical strip. Use a balanced composition and branch sideways;
+  ordinary diagrams should have a width/height ratio around 0.65 to 1.6.
+- Use clean 2.5mm rounded cards, 5mm inner padding, 0.8pt borders, dark text,
+  and 1pt -Latex arrows. Diamonds are only for decisions.
+- Use this fresh official-style palette, defining colors inside the snippet:
+  FreshBlue #0F62FE, FreshNavy #161616, FreshTeal #007D79,
+  FreshViolet #8A3FFC, FreshAmber #F1C21B, FreshGreen #198038,
+  FreshRose #DA1E28. Use pale tints for fills and no more than five accents.
+- Keep labels short, centered, and fully contained. Put Yes/No labels outside
+  the diamond beside separate outgoing segments.
+- Do not add shadows, gradients, page frames, decorative clutter, or emoji.
+
+Return exactly <TIKZ> with the complete corrected tikzpicture followed by
+<EXPLANATION> with a short description. Return no Markdown or other prose."""
+
 AUTOFIX_SYSTEM_PROMPT = f"""You are an expert LaTeX/TikZ debugger. You will be \
 given a TikZ code snippet that failed to compile, along with the pdflatex \
 error log. Fix the code so it compiles successfully while preserving the \
@@ -284,3 +313,11 @@ def build_autofix_user_prompt(code: str, error_log: str) -> str:
     # error is almost always in the last portion of the output.
     trimmed_log = error_log[-4000:]
     return f"Code:\n{code}\n\nCompilation error log:\n{trimmed_log}"
+
+
+def build_visual_review_prompt(code: str, explanation: str) -> str:
+    return (
+        "Rebuild this diagram now. Do not merely describe recommendations.\n\n"
+        f"Current TikZ:\n{code}\n\n"
+        f"Current explanation:\n{explanation}"
+    )
