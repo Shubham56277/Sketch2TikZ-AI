@@ -35,7 +35,8 @@ class TestCompileDiagramStorageSeparation:
             response = await compile_service.compile_diagram(CompileRequest(code=VALID_TIKZ))
 
         assert response.status == CompileStatus.SUCCESS
-        assert response.pdf_url is None
+        assert response.pdf_url is not None
+        assert response.pdf_url.startswith("/assets/local/")
         assert response.storage_error is not None
         assert "not configured" in response.storage_error.lower()
 
@@ -53,7 +54,8 @@ class TestCompileDiagramStorageSeparation:
         # NOT cause status to be reported as failed. The diagram compiled;
         # only the save step failed.
         assert response.status == CompileStatus.SUCCESS
-        assert response.pdf_url is None
+        assert response.pdf_url is not None
+        assert response.pdf_url.startswith("/assets/local/")
         assert response.storage_error is not None
         assert "AccessDenied" in response.storage_error
 

@@ -7,7 +7,7 @@ from typing import Optional
 from app.compiler.latex_compiler import cleanup_workdir, compile_tikz, pdf_to_png, pdf_to_svg
 from app.models.common import CompileStatus, ExportFormat
 from app.models.compile import CompileRequest, CompileResponse, ExportRequest, ExportResponse
-from app.storage import cos_client
+from app.storage import cos_client, local_asset_store
 
 logger = logging.getLogger("sketch2tikz.compile_service")
 
@@ -44,17 +44,21 @@ async def compile_diagram(request: CompileRequest) -> CompileResponse:
 
         pdf_url = None
         storage_error = None
-        if result.pdf_path and cos_client.is_configured():
+        pdf_bytes = result.pdf_path.read_bytes() if result.pdf_path else None
+        if pdf_bytes is not None and cos_client.is_configured():
             try:
-                pdf_bytes = result.pdf_path.read_bytes()
                 key = cos_client.build_key("diagram.pdf", project_id=request.project_id)
                 pdf_url = cos_client.upload_bytes(pdf_bytes, key, _CONTENT_TYPES[ExportFormat.PDF])
                 logger.info("compile: uploaded PDF to COS key=%s", key)
             except Exception as exc:
                 logger.exception("compile: COS upload failed after successful compilation")
                 storage_error = f"Compiled successfully, but saving the PDF failed: {exc}"
-        elif result.pdf_path and not cos_client.is_configured():
+        elif pdf_bytes is not None and not cos_client.is_configured():
             storage_error = "Compiled successfully, but Object Storage is not configured — PDF was not saved."
+
+        if pdf_url is None and pdf_bytes is not None:
+            pdf_url = local_asset_store.put(pdf_bytes, _CONTENT_TYPES[ExportFormat.PDF])
+            logger.warning("compile: using temporary local preview fallback")
 
         logger.info(
             "compile: success duration_ms=%s storage_error=%s", result.duration_ms, bool(storage_error)
