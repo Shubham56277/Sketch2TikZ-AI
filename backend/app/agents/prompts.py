@@ -26,14 +26,14 @@ _KNOWN_GOOD_EXAMPLE = r"""<TIKZ>
   \node[decision, below=18mm of form] (valid) {Credentials valid?};
   \node[result, below left=18mm and 25mm of valid] (error) {Show error message};
   \node[result, below right=18mm and 25mm of valid] (dashboard) {Open dashboard};
-  \node[startstop, below=20mm of valid] (end) {End};
+  \node[startstop] (end) at ($(error.south)!0.5!(dashboard.south)+(0,-18mm)$) {End};
 
   \draw[flow] (start) -- (form);
   \draw[flow] (form) -- (valid);
   \draw[flow] (valid.west) -| node[pos=0.25, above] {No} (error.north);
   \draw[flow] (valid.east) -| node[pos=0.25, above] {Yes} (dashboard.north);
-  \draw[flow] (error.south) |- (end.west);
-  \draw[flow] (dashboard.south) |- (end.east);
+  \draw[flow] (error.south) -- ++(0,-8mm) -| (end.west);
+  \draw[flow] (dashboard.south) -- ++(0,-8mm) -| (end.east);
 \end{tikzpicture}
 </TIKZ>
 <EXPLANATION>
@@ -81,10 +81,11 @@ node the same color.
 establish one dominant accent color, use secondary colors to distinguish stages \
 or branches, and reserve green for success, rose/red for failure, orange for \
 decisions or warnings, and blue/teal for neutral processing.
-- Create visual depth without external assets: use line width variation, double \
-borders for important terminal nodes, subtle fill gradients with top color and \
-bottom color when safe, and pale rounded group panels made with the fit and \
-backgrounds libraries. Keep contrast high and text dark.
+- Create visual depth without external assets using flat soft fills, whitespace, \
+and pale rounded group panels made with the fit and backgrounds libraries. Use \
+clean single borders around 0.7--0.9pt with rounded corners and adequate inner \
+padding. Avoid double borders, heavy black frames, gradients, shadows, glow \
+effects, and decorative page borders; they render poorly at small preview sizes.
 - For architecture, pipeline, lifecycle, or multi-stage diagrams, place related \
 nodes inside softly colored labeled containers. For mind maps, use a bold central \
 hub and distinct color families for each major branch. For plots and mathematical \
@@ -103,6 +104,25 @@ rectangles for actions, and database cylinders only for stored data.
 - Route branches with orthogonal connectors using --, -|, and |-. Avoid diagonal \
 lines through nodes. Connect to explicit anchors such as .north, .south, .east, \
 and .west when that prevents crossings.
+- Treat connector routing as a hard constraint: no connector may pass through a \
+node, node label, edge label, or another connector. Lines may meet only at a \
+deliberate junction; mark multi-way junctions with a small filled circle. Never \
+draw two coincident lines on top of each other.
+- Give every connector a visible straight segment after leaving a node. Use \
+shorten >=1pt and shorten <=1pt where arrowheads touch borders. Do not let arrow \
+shafts protrude inside shapes, stop short of shapes, or extend to the page edge.
+- Put branch outcomes on one row and their shared continuation/End on a distinct \
+row at least 16mm lower. Route each outcome downward first, then inward to the \
+shared node. Never run a horizontal merge line through the center or border of \
+the shared node.
+- Route retry/feedback loops around the outside of the entire node column with at \
+least 12mm clearance. Build them with named coordinates and explicit offsets, for \
+example `-- ++(-15mm,0) |- (target.west)`. Do not reuse a decision's Yes/No \
+branch segment as part of a feedback loop and do not place an arrowhead on an \
+unrelated crossing.
+- Keep all diagram content at least 6mm inside its visual bounding box. Do not \
+draw a rectangle around the whole tikzpicture; the standalone PDF supplies the \
+canvas automatically.
 - Put Yes/No labels beside their outgoing decision edges, never over the diamond \
 text or another connector.
 - Keep branches symmetric where practical and merge them cleanly before the next \
