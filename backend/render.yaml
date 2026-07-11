@@ -1,0 +1,59 @@
+# Render Blueprint for the Sketch2TikZ AI backend.
+#
+# Deploy: https://render.com -> New -> Blueprint -> point at this repo/branch.
+# Render reads this file automatically once "backend" is set as the root
+# directory (or it detects render.yaml at the repo root during import).
+#
+# Secrets marked `sync: false` are NOT stored here — Render will prompt for
+# them once during setup, and you can update them anytime in the dashboard
+# under Environment. They are never committed to git.
+services:
+  - type: web
+    name: sketch2tikz-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: ALLOWED_ORIGINS
+        value: https://sketch2-tik-z-ai.vercel.app
+
+      - key: WATSONX_URL
+        value: https://us-south.ml.cloud.ibm.com
+      - key: WATSONX_TEXT_MODEL_ID
+        value: ibm/granite-3-8b-instruct
+      - key: WATSONX_VISION_MODEL_ID
+        value: ibm/granite-vision-3-2-2b
+      - key: WATSONX_API_KEY
+        sync: false
+      - key: WATSONX_PROJECT_ID
+        sync: false
+
+      - key: CLOUDANT_DB_NAME
+        value: sketch2tikz_projects
+      - key: CLOUDANT_URL
+        sync: false
+      - key: CLOUDANT_APIKEY
+        sync: false
+
+      - key: COS_ENDPOINT
+        value: https://s3.us-south.cloud-object-storage.appdomain.cloud
+      - key: COS_BUCKET
+        value: sketch2tikz-assets
+      - key: COS_API_KEY
+        sync: false
+      - key: COS_INSTANCE_CRN
+        sync: false
+
+      - key: LATEX_ENGINE
+        value: pdflatex
+      - key: COMPILE_TIMEOUT_SECONDS
+        value: 25
+      - key: AUTOFIX_MAX_ATTEMPTS
+        value: 2
