@@ -9,7 +9,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import assets, compile, generate, health, projects, sketch
+from app.api import assets, compile, generate, health, orchestrate, projects, sketch
 from app.config import get_settings
 from app.database import cloudant_client
 
@@ -41,6 +41,8 @@ app.include_router(compile.router)
 app.include_router(sketch.router)
 app.include_router(projects.router)
 app.include_router(assets.router)
+app.include_router(orchestrate.router)
+app.include_router(orchestrate.spec_router)
 
 
 @app.on_event("startup")

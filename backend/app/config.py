@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     app_env: str = "development"
     log_level: str = "INFO"
     allowed_origins: str = "http://localhost:3000"
+    # Optional shared secret for the dedicated watsonx Orchestrate tool API.
+    # When empty, the endpoints remain open for initial classroom demos.
+    orchestrate_api_key: str = ""
 
     # --- watsonx.ai ---
     watsonx_api_key: str = ""
