@@ -12,7 +12,12 @@ import logging
 
 from app.agents import prompts, watsonx_client
 from app.agents.response_parser import parse_model_response
-from app.compiler.latex_compiler import compile_tikz, cleanup_workdir
+from app.compiler.latex_compiler import (
+    cleanup_workdir,
+    compile_tikz,
+    normalize_document,
+    validate_document,
+)
 from app.config import get_settings
 from app.models.common import CompileStatus
 from app.models.generate import (
@@ -24,6 +29,15 @@ from app.models.generate import (
 )
 
 logger = logging.getLogger("sketch2tikz.generation")
+
+
+class GenerationValidationError(ValueError):
+    """Raised when Granite's output fails structural validation even after sanitization."""
+
+    def __init__(self, errors: list[str], code: str):
+        self.errors = errors
+        self.code = code
+        super().__init__("; ".join(errors))
 
 
 def _format_history(history: list[ChatTurn]) -> str:
@@ -41,14 +55,23 @@ async def generate_diagram(request: GenerateRequest) -> GenerateResponse:
         history_text=_format_history(request.history),
     )
 
+    logger.info("generate: model=%s diagram_type=%s", settings.watsonx_text_model_id, request.diagram_type)
     raw = await watsonx_client.generate_text(prompts.TIKZ_SYSTEM_PROMPT, user_prompt)
     parsed = parse_model_response(raw)
+    logger.info("generate: sanitized code length=%d chars", len(parsed.code))
+
+    document = normalize_document(parsed.code)
+    validation = validate_document(document)
+    validation_errors = validation.errors if not validation.valid else None
+    if validation_errors:
+        logger.warning("generate: sanitized output still fails validation: %s", validation_errors)
 
     return GenerateResponse(
         code=parsed.code,
         explanation=parsed.explanation,
         diagram_type=request.diagram_type,
         model_id=settings.watsonx_text_model_id,
+        validation_errors=validation_errors,
     )
 
 
@@ -66,6 +89,7 @@ async def autofix_diagram(request: AutofixRequest) -> AutofixResponse:
 
     for attempt in range(1, settings.autofix_max_attempts + 1):
         attempts = attempt
+        logger.info("autofix: attempt %d/%d", attempt, settings.autofix_max_attempts)
         user_prompt = prompts.build_autofix_user_prompt(current_code, current_log)
         raw = await watsonx_client.generate_text(prompts.AUTOFIX_SYSTEM_PROMPT, user_prompt)
         parsed = parse_model_response(raw)
@@ -76,6 +100,7 @@ async def autofix_diagram(request: AutofixRequest) -> AutofixResponse:
         try:
             if result.success:
                 compile_status = CompileStatus.SUCCESS
+                logger.info("autofix: succeeded on attempt %d", attempt)
                 return AutofixResponse(
                     code=current_code,
                     explanation=explanation,
@@ -86,6 +111,12 @@ async def autofix_diagram(request: AutofixRequest) -> AutofixResponse:
                 )
             current_log = result.log
             compile_status = CompileStatus.TIMEOUT if result.timed_out else CompileStatus.FAILED
+            logger.warning(
+                "autofix: attempt %d failed (stage=%s, first_error=%s)",
+                attempt,
+                result.stage,
+                result.first_error,
+            )
         finally:
             if result.pdf_path:
                 cleanup_workdir(result.pdf_path)

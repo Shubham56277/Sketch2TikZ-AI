@@ -32,6 +32,11 @@ class GenerateResponse(BaseModel):
     compile_status: Optional[CompileStatus] = None
     compile_log: Optional[str] = None
     pdf_url: Optional[str] = None
+    # Populated when the sanitized code still fails structural validation
+    # (unbalanced braces, missing environments, etc). The code is still
+    # returned so the user can see/edit it, but the frontend should surface
+    # this as a warning rather than treating the generation as fully clean.
+    validation_errors: Optional[List[str]] = None
 
 
 class AutofixRequest(BaseModel):

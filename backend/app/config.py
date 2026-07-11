@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     watsonx_api_key: str = ""
     watsonx_url: str = "https://us-south.ml.cloud.ibm.com"
     watsonx_project_id: str = ""
-    watsonx_text_model_id: str = "ibm/granite-3-8b-instruct"
+    watsonx_text_model_id: str = "ibm/granite-8b-code-instruct"
     watsonx_vision_model_id: str = "ibm/granite-vision-3-2-2b"
 
     # --- Cloudant ---

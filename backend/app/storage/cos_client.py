@@ -43,6 +43,28 @@ def is_configured() -> bool:
     return get_settings().is_cos_configured
 
 
+def check_bucket_access() -> tuple[bool, Optional[str]]:
+    """
+    Lightweight diagnostic used by /health. Confirms the configured bucket
+    exists and is reachable using the current credentials, without ever
+    logging or returning the API key/CRN values themselves — only a
+    boolean result and a short, generic message safe to expose externally.
+    """
+    settings = get_settings()
+    if not is_configured():
+        return False, "not configured"
+
+    try:
+        client = _get_client()
+        client.head_bucket(Bucket=settings.cos_bucket)
+        return True, None
+    except Exception as exc:
+        # Deliberately generic — the underlying ibm_botocore exception may
+        # embed request metadata; we surface only the exception class name.
+        logger.warning("COS bucket access check failed: %s", type(exc).__name__)
+        return False, type(exc).__name__
+
+
 def build_key(filename: str, project_id: Optional[str] = None, version_id: Optional[str] = None) -> str:
     if project_id:
         version_segment = version_id or "latest"

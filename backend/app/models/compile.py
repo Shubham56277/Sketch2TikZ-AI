@@ -17,6 +17,13 @@ class CompileResponse(BaseModel):
     log: str
     pdf_url: Optional[str] = None
     duration_ms: Optional[int] = None
+    # Best-effort first actionable error line extracted from the compiler log.
+    first_error: Optional[str] = None
+    # Set when compilation succeeded but uploading the result to Object
+    # Storage failed. Distinguishes "your LaTeX is broken" from "your
+    # diagram compiled fine, we just couldn't save it" — these have very
+    # different remediation paths for the user.
+    storage_error: Optional[str] = None
 
 
 class ExportRequest(BaseModel):

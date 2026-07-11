@@ -102,24 +102,27 @@ def _generate_text_sync(
     system_prompt: str,
     user_prompt: str,
 ) -> str:
-    """Generate text synchronously using the configured Granite model."""
+    """
+    Generate text synchronously using the configured Granite model.
+
+    `system_prompt` (from app.agents.prompts) is the single source of truth
+    for output-format instructions (delimited <TIKZ>/<EXPLANATION> tags, no
+    Markdown fences, no prose, etc). We deliberately do NOT wrap it in a
+    second, different instruction template here — doing so previously caused
+    the model to receive conflicting/duplicated instructions, which
+    correlated with malformed output (stray HTML fragments, missing
+    \\end{document}). Keep this function a thin, faithful pass-through.
+    """
+    settings = get_settings()
     model = _get_text_model()
 
-    prompt = f"""You are an expert LaTeX and TikZ code generator.
+    prompt = f"<|system|>\n{system_prompt}\n<|user|>\n{user_prompt}\n<|assistant|>\n"
 
-Instructions:
-{system_prompt}
-
-User request:
-{user_prompt}
-
-Requirements:
-- Return only valid LaTeX or TikZ output.
-- Do not include Markdown code fences.
-- Do not include explanations before or after the code.
-- Ensure the output is complete and compilable.
-- Use only the required LaTeX packages and TikZ libraries.
-"""
+    logger.info(
+        "Generating with model=%s prompt_chars=%d",
+        settings.watsonx_text_model_id,
+        len(prompt),
+    )
 
     response = model.generate_text(
         prompt=prompt,
@@ -131,7 +134,9 @@ Requirements:
             "watsonx.ai returned an empty response."
         )
 
-    return str(response).strip()
+    raw = str(response).strip()
+    logger.info("Received raw model response: %d chars", len(raw))
+    return raw
 
 
 def _generate_vision_sync(

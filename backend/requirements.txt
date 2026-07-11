@@ -7,6 +7,11 @@ httpx==0.28.1
 python-dotenv==1.0.1
 tenacity==9.0.0
 
+# Testing (dev-only, but kept in the same file per the project's current
+# single-requirements-file convention; not needed at container runtime)
+pytest==8.3.4
+pytest-asyncio==0.25.2
+
 # IBM Cloud SDKs
 ibm-watsonx-ai==1.1.26
 ibmcloudant==0.10.2
