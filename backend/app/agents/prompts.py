@@ -99,6 +99,18 @@ not invent specific companies, credentials, metrics, or claims.
 explicit line breaks for long labels so text stays inside shapes.
 - Keep at least 14mm vertical and 22mm horizontal separation between nodes. \
 Decision branches need at least 24mm horizontal clearance on each side.
+- Treat those separations as empty edge-to-edge gaps, not center-to-center node \
+distances. Account for each node's full width and height before positioning the \
+next node. Never place two node bounding boxes so they touch or overlap.
+- Use a layout grid with distinct rows and columns. Nodes on successive primary \
+flow rows must normally use `below=of`; sibling branches must use `below left` \
+and `below right` (or separate named coordinates) with equal offsets. Do not \
+place every node in one narrow vertical column when the flow contains branches.
+- For a decision with Yes/No outcomes, the diamond must occupy its own row, the \
+two outcomes must occupy a second row in separate left/right lanes, and any \
+merge, result, or End node must occupy a third centered row. A decision diamond \
+must never sit directly on the primary vertical connector with Yes/No text \
+inside or across the diamond.
 - Use diamonds only for questions/decisions, rounded rectangles for start/end, \
 rectangles for actions, and database cylinders only for stored data.
 - Route branches with orthogonal connectors using --, -|, and |-. Avoid diagonal \
@@ -125,11 +137,29 @@ draw a rectangle around the whole tikzpicture; the standalone PDF supplies the \
 canvas automatically.
 - Put Yes/No labels beside their outgoing decision edges, never over the diamond \
 text or another connector.
+- Attach Yes/No labels to short horizontal or vertical edge segments outside \
+the diamond using `node[pos=..., above]` or `node[pos=..., right]`. Keep every \
+edge label at least 2mm from node text and borders.
 - Keep branches symmetric where practical and merge them cleanly before the next \
 shared step. Do not place a shared node directly on top of branch connectors.
 - Use whitespace as part of the design and aim for a balanced landscape or \
 portrait canvas rather than squeezing everything into a narrow column. Vary node \
 widths deliberately while maintaining alignment.
+- Keep the overall aspect ratio practical for a PDF preview: target roughly \
+0.65--1.6 width/height for ordinary flowcharts. If a flow would become very \
+tall, split it into two or three columns, stages, or grouped lanes rather than \
+shrinking nodes or reducing spacing.
+- Use a consistent professional component system: 2--3mm rounded corners for \
+process/result cards, 5--7mm inner padding, 0.8pt colored borders, soft fills \
+around 6--14 percent, dark readable text, and 0.9--1.1pt connectors. Keep corner \
+radii, border weights, fonts, and padding consistent across equivalent nodes.
+- Prefer an editorial palette on white: navy/blue and teal for primary stages, \
+violet for transformation, amber/orange for decisions, green for success, and \
+rose for errors. Use color semantically and ensure text remains dark; never use \
+neon colors, low-contrast text, or more than six accent hues.
+- Do not place an End node over a result node. Every terminal/result card must \
+have its own complete row, followed by at least 14mm of empty vertical space \
+before a separate End node, unless the result itself is clearly the terminal.
 - Add small textual stage labels, numbered badges made from circular TikZ nodes, \
 or a compact legend only when they improve comprehension. Never use emoji, \
 external icons, images, or fonts.
