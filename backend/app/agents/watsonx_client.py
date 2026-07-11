@@ -1,13 +1,9 @@
 """
 IBM watsonx.ai integration.
 
-This module is the ONLY place ibm_watsonx_ai is imported. Services call the
-functions below and never touch the SDK directly.
-
-The watsonx.ai SDK's ModelInference.generate_text is a blocking (synchronous)
-call. To avoid stalling FastAPI's asyncio event loop, every call is offloaded
-to a worker thread via `anyio.to_thread.run_sync` (FastAPI's own dependency,
-so no extra package is needed).
+This module is the only place where ibm_watsonx_ai is imported.
+All blocking SDK calls are executed in worker threads so they do not block
+FastAPI's asyncio event loop.
 """
 
 import base64
@@ -27,86 +23,228 @@ _vision_model: Optional[ModelInference] = None
 
 _GENERATE_PARAMS = {
     "decoding_method": "greedy",
-    "max_new_tokens": 1500,
-    "min_new_tokens": 0,
+    "max_new_tokens": 3000,
+    "min_new_tokens": 1,
     "repetition_penalty": 1.05,
 }
 
 
 def is_configured() -> bool:
-    return get_settings().is_watsonx_configured
+    """Check whether the required watsonx.ai settings are available."""
+    settings = get_settings()
+
+    return bool(
+        settings.watsonx_api_key
+        and settings.watsonx_project_id
+        and settings.watsonx_url
+        and settings.watsonx_text_model_id
+    )
 
 
 def _get_credentials() -> Credentials:
+    """Create IBM watsonx.ai credentials."""
     settings = get_settings()
-    return Credentials(url=settings.watsonx_url, api_key=settings.watsonx_api_key)
+
+    return Credentials(
+        url=settings.watsonx_url.strip(),
+        api_key=settings.watsonx_api_key.strip(),
+    )
 
 
 def _get_text_model() -> ModelInference:
+    """Create and cache the text-generation model."""
     global _text_model
+
     if _text_model is None:
         settings = get_settings()
-        _text_model = ModelInference(
-            model_id=settings.watsonx_text_model_id,
-            credentials=_get_credentials(),
-            project_id=settings.watsonx_project_id,
+
+        logger.info(
+            "Initializing watsonx text model: %s",
+            settings.watsonx_text_model_id,
         )
+
+        _text_model = ModelInference(
+            model_id=settings.watsonx_text_model_id.strip(),
+            credentials=_get_credentials(),
+            project_id=settings.watsonx_project_id.strip(),
+        )
+
     return _text_model
 
 
 def _get_vision_model() -> ModelInference:
+    """Create and cache the vision-capable model."""
     global _vision_model
+
     if _vision_model is None:
         settings = get_settings()
-        _vision_model = ModelInference(
-            model_id=settings.watsonx_vision_model_id,
-            credentials=_get_credentials(),
-            project_id=settings.watsonx_project_id,
+
+        if not settings.watsonx_vision_model_id:
+            raise RuntimeError(
+                "WATSONX_VISION_MODEL_ID is not configured."
+            )
+
+        logger.info(
+            "Initializing watsonx vision model: %s",
+            settings.watsonx_vision_model_id,
         )
+
+        _vision_model = ModelInference(
+            model_id=settings.watsonx_vision_model_id.strip(),
+            credentials=_get_credentials(),
+            project_id=settings.watsonx_project_id.strip(),
+        )
+
     return _vision_model
 
 
-def _generate_text_sync(system_prompt: str, user_prompt: str) -> str:
+def _generate_text_sync(
+    system_prompt: str,
+    user_prompt: str,
+) -> str:
+    """Generate text synchronously using the configured Granite model."""
     model = _get_text_model()
-    # Granite instruct models use a chat-style prompt; we compose it manually
-    # here to keep this module's public surface framework-agnostic.
-    prompt = f"<|system|>\n{system_prompt}\n<|user|>\n{user_prompt}\n<|assistant|>\n"
-    response = model.generate_text(prompt=prompt, params=_GENERATE_PARAMS)
-    return response
+
+    prompt = f"""You are an expert LaTeX and TikZ code generator.
+
+Instructions:
+{system_prompt}
+
+User request:
+{user_prompt}
+
+Requirements:
+- Return only valid LaTeX or TikZ output.
+- Do not include Markdown code fences.
+- Do not include explanations before or after the code.
+- Ensure the output is complete and compilable.
+- Use only the required LaTeX packages and TikZ libraries.
+"""
+
+    response = model.generate_text(
+        prompt=prompt,
+        params=_GENERATE_PARAMS,
+    )
+
+    if not response:
+        raise RuntimeError(
+            "watsonx.ai returned an empty response."
+        )
+
+    return str(response).strip()
 
 
-def _generate_vision_sync(system_prompt: str, user_text: str, image_bytes: bytes, mime_type: str) -> str:
+def _generate_vision_sync(
+    system_prompt: str,
+    user_text: str,
+    image_bytes: bytes,
+    mime_type: str,
+) -> str:
+    """Generate TikZ from an uploaded image synchronously."""
     model = _get_vision_model()
-    b64_image = base64.b64encode(image_bytes).decode("utf-8")
+
+    encoded_image = base64.b64encode(
+        image_bytes
+    ).decode("utf-8")
+
     messages = [
         {
             "role": "user",
             "content": [
-                {"type": "text", "text": f"{system_prompt}\n\n{user_text}"},
+                {
+                    "type": "text",
+                    "text": (
+                        f"{system_prompt}\n\n"
+                        f"{user_text}\n\n"
+                        "Return only valid, complete, compilable "
+                        "LaTeX or TikZ code without Markdown fences."
+                    ),
+                },
                 {
                     "type": "image_url",
-                    "image_url": {"url": f"data:{mime_type};base64,{b64_image}"},
+                    "image_url": {
+                        "url": (
+                            f"data:{mime_type};"
+                            f"base64,{encoded_image}"
+                        )
+                    },
                 },
             ],
         }
     ]
+
     response = model.chat(messages=messages)
-    return response["choices"][0]["message"]["content"]
+
+    try:
+        content = response["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError) as exc:
+        logger.exception(
+            "Unexpected watsonx vision response format"
+        )
+        raise RuntimeError(
+            "watsonx.ai returned an invalid vision response."
+        ) from exc
+
+    if not content:
+        raise RuntimeError(
+            "watsonx.ai returned an empty vision response."
+        )
+
+    return str(content).strip()
 
 
-async def generate_text(system_prompt: str, user_prompt: str) -> str:
-    """Runs a text-only Granite completion off the event loop thread."""
+async def generate_text(
+    system_prompt: str,
+    user_prompt: str,
+) -> str:
+    """Run text generation without blocking FastAPI."""
     if not is_configured():
-        raise RuntimeError("watsonx.ai is not configured (missing WATSONX_API_KEY/WATSONX_PROJECT_ID)")
+        raise RuntimeError(
+            "watsonx.ai is not configured. Check "
+            "WATSONX_API_KEY, WATSONX_PROJECT_ID, "
+            "WATSONX_URL, and WATSONX_TEXT_MODEL_ID."
+        )
+
     logger.info("Calling watsonx text model")
-    return await anyio.to_thread.run_sync(_generate_text_sync, system_prompt, user_prompt)
+
+    try:
+        return await anyio.to_thread.run_sync(
+            _generate_text_sync,
+            system_prompt,
+            user_prompt,
+        )
+    except Exception:
+        logger.exception(
+            "watsonx text generation failed"
+        )
+        raise
 
 
-async def generate_from_image(system_prompt: str, user_text: str, image_bytes: bytes, mime_type: str) -> str:
-    """Runs a vision-capable Granite completion off the event loop thread."""
+async def generate_from_image(
+    system_prompt: str,
+    user_text: str,
+    image_bytes: bytes,
+    mime_type: str,
+) -> str:
+    """Run vision generation without blocking FastAPI."""
     if not is_configured():
-        raise RuntimeError("watsonx.ai is not configured (missing WATSONX_API_KEY/WATSONX_PROJECT_ID)")
+        raise RuntimeError(
+            "watsonx.ai is not configured. Check the "
+            "required environment variables."
+        )
+
     logger.info("Calling watsonx vision model")
-    return await anyio.to_thread.run_sync(
-        _generate_vision_sync, system_prompt, user_text, image_bytes, mime_type
-    )
+
+    try:
+        return await anyio.to_thread.run_sync(
+            _generate_vision_sync,
+            system_prompt,
+            user_text,
+            image_bytes,
+            mime_type,
+        )
+    except Exception:
+        logger.exception(
+            "watsonx vision generation failed"
+        )
+        raise
