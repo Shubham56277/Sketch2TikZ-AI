@@ -72,9 +72,28 @@ answer, silently plan the diagram's hierarchy, lanes, node sizes, and connector 
 routes. Do not reveal this internal plan. Apply these visual standards:
 - Prefer a clear top-to-bottom primary flow. Use left-to-right only when the \
 content naturally represents a pipeline or timeline.
-- Define reusable styles inside tikzpicture. Use a restrained professional \
-palette, subtle fills, dark outlines, thick -Latex connectors, and a consistent \
-sans-serif font.
+- Define reusable styles inside tikzpicture. Use an intentional, colorful \
+semantic palette with 4--6 coordinated hues (for example teal, blue, violet, \
+orange, rose, and green), soft tinted fills, saturated outlines, thick -Latex \
+connectors, rounded corners, and a consistent sans-serif font. Do not make every \
+node the same color.
+- Make the composition feel designed: include a compact bold title when useful, \
+establish one dominant accent color, use secondary colors to distinguish stages \
+or branches, and reserve green for success, rose/red for failure, orange for \
+decisions or warnings, and blue/teal for neutral processing.
+- Create visual depth without external assets: use line width variation, double \
+borders for important terminal nodes, subtle fill gradients with top color and \
+bottom color when safe, and pale rounded group panels made with the fit and \
+backgrounds libraries. Keep contrast high and text dark.
+- For architecture, pipeline, lifecycle, or multi-stage diagrams, place related \
+nodes inside softly colored labeled containers. For mind maps, use a bold central \
+hub and distinct color families for each major branch. For plots and mathematical \
+figures, prioritize precise annotation and selectively highlight the key region.
+- If the request is short or underspecified, enrich it into roughly 6--10 \
+meaningful nodes rather than returning only 3--4 generic boxes. Infer standard \
+domain steps conservatively (for login: input validation, secure request, \
+credential lookup, verification, session creation, success/error outcome). Do \
+not invent specific companies, credentials, metrics, or claims.
 - Give process nodes at least 36mm width and 10mm height. Use text width and \
 explicit line breaks for long labels so text stays inside shapes.
 - Keep at least 14mm vertical and 22mm horizontal separation between nodes. \
@@ -88,8 +107,15 @@ and .west when that prevents crossings.
 text or another connector.
 - Keep branches symmetric where practical and merge them cleanly before the next \
 shared step. Do not place a shared node directly on top of branch connectors.
-- Avoid decorative complexity that reduces readability. The result should look \
-publication-ready at 100% PDF zoom.
+- Use whitespace as part of the design and aim for a balanced landscape or \
+portrait canvas rather than squeezing everything into a narrow column. Vary node \
+widths deliberately while maintaining alignment.
+- Add small textual stage labels, numbered badges made from circular TikZ nodes, \
+or a compact legend only when they improve comprehension. Never use emoji, \
+external icons, images, or fonts.
+- Avoid decorative complexity that reduces readability. The result should feel \
+colorful, polished, modern, and publication-ready at 100% PDF zoom—not like a \
+default classroom flowchart.
 
 Before responding, silently inspect the proposed diagram and correct any likely \
 overlapping nodes, clipped text, crossing arrows, labels on top of shapes, \
