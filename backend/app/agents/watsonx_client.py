@@ -21,11 +21,9 @@ logger = logging.getLogger("sketch2tikz.watsonx")
 _text_model: Optional[ModelInference] = None
 _vision_model: Optional[ModelInference] = None
 
-_GENERATE_PARAMS = {
-    "decoding_method": "greedy",
-    "max_new_tokens": 3000,
-    "min_new_tokens": 1,
-    "repetition_penalty": 1.05,
+_CHAT_PARAMS = {
+    "temperature": 0,
+    "max_tokens": 3000,
 }
 
 
@@ -116,25 +114,29 @@ def _generate_text_sync(
     settings = get_settings()
     model = _get_text_model()
 
-    prompt = f"<|system|>\n{system_prompt}\n<|user|>\n{user_prompt}\n<|assistant|>\n"
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
 
     logger.info(
         "Generating with model=%s prompt_chars=%d",
         settings.watsonx_text_model_id,
-        len(prompt),
+        len(system_prompt) + len(user_prompt),
     )
 
-    response = model.generate_text(
-        prompt=prompt,
-        params=_GENERATE_PARAMS,
-    )
+    response = model.chat(messages=messages, params=_CHAT_PARAMS)
 
-    if not response:
-        raise RuntimeError(
-            "watsonx.ai returned an empty response."
-        )
+    try:
+        content = response["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError) as exc:
+        logger.exception("Unexpected watsonx text chat response format")
+        raise RuntimeError("watsonx.ai returned an invalid text response.") from exc
 
-    raw = str(response).strip()
+    if not content:
+        raise RuntimeError("watsonx.ai returned an empty response.")
+
+    raw = str(content).strip()
     logger.info("Received raw model response: %d chars", len(raw))
     return raw
 
