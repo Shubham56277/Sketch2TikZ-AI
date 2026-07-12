@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Sketch2TikZ AI – IBM Orchestrate Architecture Blueprint</title>
+<style>
+  * { box-sizing: border-box; margin:0; padding:0; }
+  body { background:#eef1f4; font-family: 'Segoe UI', Arial, sans-serif; }
+  #canvas {
+    position: relative;
+    width: 1920px;
+    height: 1080px;
+    background: #ffffff;
+    overflow: hidden;
+    border: 2px solid #d0d5db;
+  }
+  .title {
+    position:absolute; top:18px; left:0; width:100%; text-align:center;
+    font-size:30px; font-weight:700; color:#0f2b46; letter-spacing:0.3px;
+  }
+  .subtitle {
+    position:absolute; top:56px; left:0; width:100%; text-align:center;
+    font-size:14px; font-weight:500; color:#5a6b7a;
+  }
+  .box {
+    position:absolute; border-radius:14px; padding:10px 14px;
+    border:2px solid; box-shadow:0 1px 3px rgba(0,0,0,0.06);
+  }
+  .box-title { font-size:14px; font-weight:700; margin-bottom:4px; }
+  .box-sub { font-size:10.5px; font-weight:600; opacity:0.75; margin-bottom:4px; }
+  .box ul { list-style:none; font-size:10.5px; line-height:1.45; }
+  .box ul li:before { content:"• "; }
+
+  /* color scheme */
+  .orange { background:#fff3e6; border-color:#e08a2c; color:#7a4a10; }
+  .blue   { background:#e7f1fb; border-color:#2f6fb0; color:#123a63; }
+  .green  { background:#eaf7ee; border-color:#3f9e5c; color:#155429; }
+  .purple { background:#f2eefb; border-color:#7b5fc4; color:#3d2a76; }
+  .pink   { background:#fdeef4; border-color:#c9538a; color:#6e2649; }
+  .gray   { background:#f1f2f4; border-color:#7c868f; color:#3a4249; }
+
+  .agent {
+    position:absolute; background:#ffffff; border:1.5px solid #3f9e5c; border-radius:10px;
+    padding:6px 8px; font-size:9.5px; color:#155429;
+  }
+  .agent .a-title { font-weight:700; font-size:10.5px; margin-bottom:2px; }
+  .agent .a-sub { font-weight:600; font-size:9px; opacity:0.7; margin-bottom:2px; }
+
+  svg#arrows { position:absolute; top:0; left:0; width:1920px; height:1080px; pointer-events:none; }
+
+  .legend { position:absolute; bottom:8px; left:20px; display:flex; gap:14px; font-size:10.5px; color:#3a4249; }
+  .legend span { display:inline-flex; align-items:center; gap:5px; }
+  .swatch { width:12px; height:12px; border-radius:3px; display:inline-block; }
+</style>
+</head>
+<body>
+<div id="canvas">
+  <div class="title">Sketch2TikZ AI &ndash; IBM Orchestrate Architecture Blueprint</div>
+  <div class="subtitle">Enterprise-grade multi-agent architecture powered by IBM watsonx.ai &amp; Granite models</div>
+
+  <svg id="arrows">
+    <defs>
+      <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M1 1L8 5L1 9" fill="none" stroke="#3a4249" stroke-width="1.6"/>
+      </marker>
+      <marker id="ahDash" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M1 1L8 5L1 9" fill="none" stroke="#7b5fc4" stroke-width="1.6"/>
+      </marker>
+    </defs>
+
+    <!-- User Layer -> Frontend -->
+    <line x1="300" y1="185" x2="330" y2="185" stroke="#3a4249" stroke-width="1.8" marker-end="url(#ah)"/>
+    <text x="300" y="178" font-size="10" fill="#3a4249">Upload</text>
+
+    <!-- Frontend -> API Gateway -->
+    <line x1="590" y1="185" x2="620" y2="185" stroke="#3a4249" stroke-width="1.8" marker-end="url(#ah)"/>
+    <text x="592" y="178" font-size="10" fill="#3a4249">Request</text>
+
+    <!-- API Gateway -> Orchestrate -->
+    <line x1="880" y1="185" x2="912" y2="185" stroke="#3a4249" stroke-width="1.8" marker-end="url(#ah)"/>
+    <text x="878" y="178" font-size="10" fill="#3a4249">Process</text>
+
+    <!-- Orchestrate -> AI Services (dashed, AI workflow) -->
+    <path d="M1560 200 L1610 200" stroke="#7b5fc4" stroke-width="1.6" stroke-dasharray="5,4" fill="none" marker-end="url(#ahDash)"/>
+    <text x="1562" y="193" font-size="10" fill="#7b5fc4">Inference</text>
+
+    <!-- Orchestrate -> RAG (dashed) -->
+    <path d="M1560 430 L1610 430" stroke="#7b5fc4" stroke-width="1.6" stroke-dasharray="5,4" fill="none" marker-end="url(#ahDash)"/>
+    <text x="1540" y="423" font-size="10" fill="#7b5fc4">Retrieve context</text>
+
+    <!-- Orchestrate -> Storage (solid, data) -->
+    <path d="M1560 660 L1610 660" stroke="#2f6fb0" stroke-width="1.6" fill="none" marker-end="url(#ah)"/>
+    <text x="1548" y="653" font-size="10" fill="#2f6fb0">Store files</text>
+
+    <!-- Orchestrate down -> Compilation Engine -->
+    <path d="M1000 800 L1000 850" stroke="#3a4249" stroke-width="1.8" fill="none" marker-end="url(#ah)"/>
+    <text x="1006" y="828" font-size="10" fill="#3a4249">Compile</text>
+
+    <!-- Compilation -> Orchestrate self-heal loop (dashed back) -->
+    <path d="M480 850 C 420 850, 420 780, 480 720" stroke="#7b5fc4" stroke-width="1.6" stroke-dasharray="5,4" fill="none" marker-end="url(#ahDash)"/>
+    <text x="330" y="800" font-size="10" fill="#7b5fc4">Repair &amp; retry</text>
+
+    <!-- Compilation -> Output -->
+    <line x1="960" y1="915" x2="1000" y2="915" stroke="#3a4249" stroke-width="1.8" marker-end="url(#ah)"/>
+    <text x="948" y="908" font-size="10" fill="#3a4249">Export</text>
+
+    <!-- Output -> User (solid, back to top) -->
+    <path d="M1900 850 C 1940 700, 1940 300, 1900 190" stroke="#2f6fb0" stroke-width="1.6" fill="none" marker-end="url(#ah)"/>
+    <text x="1905" y="500" font-size="10" fill="#2f6fb0" transform="rotate(90 1905 500)">Display results</text>
+
+    <!-- Security/Observability tie-ins (dashed, monitoring) -->
+    <path d="M1440 900 L1460 900" stroke="#7c868f" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#ah)"/>
+  </svg>
+
+  <!-- SECTION 1: USER LAYER -->
+  <div class="box orange" style="left:20px; top:100px; width:270px; height:170px;">
+    <div class="box-title">User layer</div>
+    <div class="box-sub">Students · Researchers · Engineers · Professors · LaTeX users</div>
+    <ul>
+      <li>Hand-drawn diagram, PNG, JPG</li>
+      <li>PDF, SVG, existing TikZ code</li>
+      <li>Text prompt</li>
+    </ul>
+  </div>
+
+  <!-- SECTION 2: FRONTEND -->
+  <div class="box orange" style="left:330px; top:100px; width:270px; height:170px;">
+    <div class="box-title">Frontend</div>
+    <div class="box-sub">React + TanStack Start web application</div>
+    <ul>
+      <li>Drag &amp; drop upload, live preview</li>
+      <li>Diagram history, dashboard</li>
+      <li>Real-time progress, export panel</li>
+    </ul>
+  </div>
+
+  <!-- SECTION 3: API GATEWAY -->
+  <div class="box blue" style="left:620px; top:100px; width:270px; height:170px;">
+    <div class="box-title">API gateway</div>
+    <div class="box-sub">FastAPI backend</div>
+    <ul>
+      <li>Auth, rate limiting, validation</li>
+      <li>Job queue, session management</li>
+      <li>REST APIs &amp; WebSockets</li>
+    </ul>
+  </div>
+
+  <!-- SECTION 4: IBM ORCHESTRATE (CENTER) -->
+  <div class="box green" style="left:912px; top:100px; width:650px; height:700px; background:#f2faf4;">
+    <div class="box-title" style="font-size:16px;">IBM watsonx Orchestrate</div>
+    <div class="box-sub">Nine-agent orchestration pipeline</div>
+
+    <div class="agent" style="left:20px; top:70px; width:290px; height:80px;">
+      <div class="a-title">1 · Image processing agent</div>
+      <div>Cleaning, denoising, contrast &amp; edge detection</div>
+    </div>
+    <div class="agent" style="left:330px; top:70px; width:290px; height:80px;">
+      <div class="a-title">2 · Vision understanding agent</div>
+      <div class="a-sub">IBM Granite Vision</div>
+      <div>Shapes, nodes, arrows, OCR, layout</div>
+    </div>
+
+    <div class="agent" style="left:20px; top:165px; width:290px; height:80px;">
+      <div class="a-title">3 · RAG retrieval agent</div>
+      <div>Vector DB · embeddings · templates</div>
+    </div>
+    <div class="agent" style="left:330px; top:165px; width:290px; height:80px;">
+      <div class="a-title">4 · TikZ generation agent</div>
+      <div class="a-sub">IBM Granite Code</div>
+      <div>Nodes, paths, styles, LaTeX libraries</div>
+    </div>
+
+    <div class="agent" style="left:20px; top:260px; width:290px; height:80px;">
+      <div class="a-title">5 · TikZ validation agent</div>
+      <div>Syntax, brackets, packages, node refs</div>
+    </div>
+    <div class="agent" style="left:330px; top:260px; width:290px; height:80px;">
+      <div class="a-title">6 · Compilation agent</div>
+      <div>Runs pdflatex → PDF, SVG, PNG</div>
+    </div>
+
+    <div class="agent" style="left:20px; top:355px; width:290px; height:80px;">
+      <div class="a-title">7 · Self-healing agent</div>
+      <div>Detect → explain → repair → retry loop</div>
+    </div>
+    <div class="agent" style="left:330px; top:355px; width:290px; height:80px;">
+      <div class="a-title">8 · Quality review agent</div>
+      <div>Sketch vs. output similarity &amp; confidence</div>
+    </div>
+
+    <div class="agent" style="left:175px; top:450px; width:290px; height:80px;">
+      <div class="a-title">9 · Export agent</div>
+      <div>.tex · .pdf · .svg · .png · .zip</div>
+    </div>
+
+    <div style="position:absolute; left:20px; top:560px; width:600px; font-size:10.5px; color:#155429;">
+      Agents execute in a sequential pipeline (1→9) with a self-healing feedback loop
+      between validation/compilation and repair, orchestrated end-to-end by IBM watsonx Orchestrate.
+    </div>
+  </div>
+
+  <!-- SECTION 5: IBM AI SERVICES -->
+  <div class="box purple" style="left:1610px; top:100px; width:290px; height:190px;">
+    <div class="box-title">IBM AI services</div>
+    <ul>
+      <li>IBM Granite Vision</li>
+      <li>IBM Granite Code</li>
+      <li>IBM Granite Instruct</li>
+      <li>Granite Guardrails — safety, hallucination prevention, output validation</li>
+    </ul>
+  </div>
+
+  <!-- SECTION 6: RAG SYSTEM -->
+  <div class="box pink" style="left:1610px; top:330px; width:290px; height:190px;">
+    <div class="box-title">RAG system</div>
+    <div class="box-sub">Vector DB: ChromaDB / Milvus / FAISS</div>
+    <ul>
+      <li>TikZ &amp; PGF documentation</li>
+      <li>LaTeX guides, templates, symbols</li>
+      <li>Connected to Granite models</li>
+    </ul>
+  </div>
+
+  <!-- SECTION 7: STORAGE -->
+  <div class="box blue" style="left:1610px; top:560px; width:290px; height:220px;">
+    <div class="box-title">Storage</div>
+    <div class="box-sub">IBM Cloud Object Storage</div>
+    <ul>
+      <li>Images, PDF, SVG, PNG, TEX, ZIP</li>
+    </ul>
+    <div class="box-sub" style="margin-top:8px;">IBM Cloudant</div>
+    <ul>
+      <li>User accounts, job status</li>
+      <li>Diagram history, logs, analytics</li>
+    </ul>
+  </div>
+
+  <!-- BOTTOM ROW -->
+  <!-- SECTION 8: COMPILATION ENGINE -->
+  <div class="box gray" style="left:480px; top:850px; width:460px; height:150px;">
+    <div class="box-title">Compilation engine</div>
+    <div class="box-sub">Docker worker</div>
+    <ul>
+      <li>TeXLive, pdflatex, latexmk</li>
+      <li>Returns compiled files to Orchestrate</li>
+    </ul>
+  </div>
+
+  <!-- SECTION 9 + 10: OBSERVABILITY & SECURITY -->
+  <div class="box gray" style="left:960px; top:850px; width:460px; height:150px;">
+    <div class="box-title">Observability &amp; security</div>
+    <ul>
+      <li>IBM Instana (monitoring) · IBM Log Analysis (logging)</li>
+      <li>Tracks latency, AI response time, error rate</li>
+      <li>IBM IAM, JWT auth, HTTPS, encryption, RBAC, guardrails, rate limiting</li>
+    </ul>
+  </div>
+
+  <!-- SECTION 11: OUTPUT -->
+  <div class="box orange" style="left:1440px; top:850px; width:460px; height:150px;">
+    <div class="box-title">Output dashboard</div>
+    <ul>
+      <li>Original image → detected structure → TikZ code</li>
+      <li>Compiled PDF, SVG, PNG</li>
+      <li>Similarity score &amp; download buttons</li>
+    </ul>
+  </div>
+
+  <div class="legend">
+    <span><span class="swatch" style="background:#2f6fb0;"></span>IBM Cloud</span>
+    <span><span class="swatch" style="background:#7b5fc4;"></span>AI models</span>
+    <span><span class="swatch" style="background:#3f9e5c;"></span>Orchestrate agents</span>
+    <span><span class="swatch" style="background:#e08a2c;"></span>Frontend / output</span>
+    <span><span class="swatch" style="background:#c9538a;"></span>RAG</span>
+    <span><span class="swatch" style="background:#7c868f;"></span>Infrastructure</span>
+  </div>
+</div>
+</body>
+</html>
+
+
